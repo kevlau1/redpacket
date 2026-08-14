@@ -4,13 +4,17 @@ Live demo: [https://redpocket-virid.vercel.app/](https://redpocket-virid.vercel.
 
 Drop a password into a group chat. People race to claim. The money lands in a **shielded** STRK20 balance, not a public transfer. Onlookers can see that the pool paid the helper; they do not see who opened which share.
 
-Same ritual as a WeChat red packet. Different ledger: stealth is the default, not a toggle.
+Two modes — **equal split** and **lucky draw** — are the whole product. Stealth is the default, not a toggle.
 
 ## Why bother
 
-**Fun.** Set `lucky`, six shares, a little STRK (or USDC, strkBTC, ETH — anything Ready can Shield). Paste one link. Friends mash Claim. Equal split or random. Each wallet gets **one** grab. The password never hits the chain, so the second share is not a public loot box after the first claim.
+This is the feature group chats never stop using. Someone drops 1,000 USDC. Ten people hit Claim. Either everyone walks away with 100 even, or it is a lucky packet: one friend screenshots 186.40, another groans at 41.12, and the thread explodes. Same dopamine. The payout is private the moment it lands.
 
-**Useful.** Pay a group without publishing a roster. Tip someone in Telegram without a visible “who paid whom.” Run a small office packet or a meetup raffle where the payout is private the moment it lands. Claimers do not need a fresh address; they need Ready, on this network, with private tokens enabled.
+**Equal.** Fair split for a dinner, a meetup, a team bonus. No spreadsheet, no “please send your address,” no public roster of who got paid.
+
+**Lucky.** The chaotic one. Random shares, one grab per wallet, password never on-chain — so the first claim does not turn the rest into a public loot box. The group argues about luck. Voyager does not get a leaderboard of names.
+
+Claimers need Ready on this network, with private tokens enabled. STRK, USDC, strkBTC, ETH — anything the wallet can Shield.
 
 What stays quiet: who claimed, and the password. What does not: the total that left the pool. Redpocket is honest about that.
 
@@ -18,11 +22,11 @@ Built for the [STRK20 Private Sprint](https://strk20.starknet.io/hackathon): Wal
 
 ## How it feels
 
-Saturday night, six people in a chat. You shield 6 STRK, seal a packet with password `lucky`, 6 shares, random. You send **one** claim link — not six secrets.
+New Year in a 10-person Telegram. You shield 1,000 USDC and seal a packet with password `lucky`.
 
-A-Hua taps it on the train, connects Ready, claims. ~1.4 STRK appears in her shielded balance. The same wallet cannot grab again. A-Qiang tries from his account and gets another share. Nobody in the thread, and nobody scrolling Voyager, gets a neat list of who won what.
+Equal mode: ten claims, 100 USDC each, done in a minute. Lucky mode: you pick random, send **one** link, and let them fight. A friend on the train claims and hits a fat share. Someone else opens a thinner one. The same wallet cannot grab twice. Unclaimed funds, after expiry, refund to **your** shielded balance with the wallet that sealed the packet.
 
-You keep the refund secret on your device. After expiry, unclaimed funds come back to **your** shielded balance, same wallet that sealed the packet.
+That is why it spreads. People already know the ritual. Redpocket is that ritual, with the claim itself in stealth.
 
 ## STRK20 integration
 
