@@ -52,9 +52,13 @@ export function providerIndexForChain(chainId: unknown): number {
 }
 
 export const REDPOCKET_MAINNET =
-  process.env.NEXT_PUBLIC_REDPOCKET_MAINNET ?? process.env.NEXT_PUBLIC_SEALPACK_MAINNET ?? "0x0";
+  process.env.NEXT_PUBLIC_REDPOCKET_MAINNET ??
+  process.env.NEXT_PUBLIC_SEALPACK_MAINNET ??
+  "0x0671dfa406d914e9b422792b698b6cb8f585bc5f6ef789f31d65b46143fdaef5";
 export const REDPOCKET_SEPOLIA =
-  process.env.NEXT_PUBLIC_REDPOCKET_SEPOLIA ?? process.env.NEXT_PUBLIC_SEALPACK_SEPOLIA ?? "0x0";
+  process.env.NEXT_PUBLIC_REDPOCKET_SEPOLIA ??
+  process.env.NEXT_PUBLIC_SEALPACK_SEPOLIA ??
+  "0x04ec2a146f05c73ffc4ab6cbf482ef60847499515d8c44be622a6007ffd0c588";
 
 export function poolForIndex(index: number): string {
   if (index === 0) return POOL_MAINNET;

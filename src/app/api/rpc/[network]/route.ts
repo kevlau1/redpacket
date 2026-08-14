@@ -81,10 +81,8 @@ function upstream(network: string): string | null {
     }
     return null;
   }
-  if (process.env.NODE_ENV === "development") {
-    if (network === "mainnet") return "https://api.cartridge.gg/x/starknet/mainnet";
-    if (network === "sepolia") return "https://api.cartridge.gg/x/starknet/sepolia";
-  }
+  if (network === "mainnet") return "https://api.cartridge.gg/x/starknet/mainnet";
+  if (network === "sepolia") return "https://api.cartridge.gg/x/starknet/sepolia";
   return null;
 }
 
