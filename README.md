@@ -1,5 +1,7 @@
 # Redpocket
 
+Live demo: [https://redpocket-virid.vercel.app/](https://redpocket-virid.vercel.app/) (Ready wallet, Starknet Mainnet).
+
 Password Redpockets on Starknet [STRK20](https://strk20.starknet.io/hackathon). Claims settle into a shielded balance.
 
 Stealth is the default, not a second product: send and claim both go through the privacy pool. Each address can claim a given Redpocket once.
