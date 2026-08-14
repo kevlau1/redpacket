@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import type { WALLET_API } from "@starknet-io/types-js";
+import { num } from "starknet";
 import styles from "../../app.module.css";
 import Shell from "../../components/Shell";
 import Receipt from "../../components/Receipt";
@@ -10,14 +12,16 @@ import SelectWallet from "../../components/client/SelectWallet";
 import { useStoreWallet } from "../../components/Wallet/walletContext";
 import { useFrontendProvider } from "../../components/client/provider/providerContext";
 import { myFrontendProviders } from "@/lib/constants";
-import { passwordPreimage } from "@/lib/crypto";
-import { fetchClaimed, fetchPack, fetchTokenDecimals } from "@/lib/onchain";
+import { claimLeaves, committedLeaves, creatorHash, passwordPreimage } from "@/lib/crypto";
+import { merkleHeight, merkleProof, merkleVerify } from "@/lib/merkle";
+import { fetchClaimed, fetchPack, fetchTokenDecimals, unusedShareIndex } from "@/lib/onchain";
 import { passwordFromHash } from "@/lib/storage";
 import {
   claimCalldata,
   errorResult,
   helperOrThrow,
   submitStrk20,
+  busyCtaLabel,
   type ActionResult,
 } from "@/lib/strk20";
 import { fmtExpiry } from "@/lib/format";
@@ -40,8 +44,11 @@ function ClaimForm({ dropId }: { dropId: string }) {
   const [slotsLeft, setSlotsLeft] = useState<number | null>(null);
   const [expiry, setExpiry] = useState(0);
   const [exists, setExists] = useState(false);
+  const [creatorHashOnchain, setCreatorHashOnchain] = useState("0x0");
   const [result, setResult] = useState<ActionResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [justClaimed, setJustClaimed] = useState(false);
+  const [payout, setPayout] = useState<bigint | null>(null);
 
   useEffect(() => {
     const hashPw = passwordFromHash(window.location.hash);
@@ -74,6 +81,7 @@ function ClaimForm({ dropId }: { dropId: string }) {
       setSlotsLeft(pack.slotsLeft);
       setExpiry(Number(pack.expiry));
       setTokenAddr(pack.token);
+      setCreatorHashOnchain(pack.creatorHash);
       const known = resolveToken(pack.token, index);
       if (known.id === "custom") {
         const d = await fetchTokenDecimals(provider, pack.token);
@@ -85,6 +93,8 @@ function ClaimForm({ dropId }: { dropId: string }) {
       if (address) {
         const c = await fetchClaimed(provider, index, dropId, address);
         if (cancelled) return;
+        setJustClaimed(false);
+        setPayout(null);
         setClaimed(c);
         setStatus(c ? "This address already claimed." : `${pack.slotsLeft} share${pack.slotsLeft === 1 ? "" : "s"} left.`);
       } else {
@@ -106,27 +116,87 @@ function ClaimForm({ dropId }: { dropId: string }) {
       setResult(errorResult("Redpocket token not loaded yet"));
       return;
     }
+    try {
+      if (num.toBigInt(creatorHashOnchain) !== 0n && num.toBigInt(creatorHashOnchain) === num.toBigInt(creatorHash(address))) {
+        setResult(errorResult("This wallet sealed this Redpocket. Connect a different account to claim a share."));
+        return;
+      }
+    } catch {
+      /* if the hash cannot be compared, live pack below still decides */
+    }
     let helper: string;
     let preimage: string;
     try {
       helper = helperOrThrow(index);
       preimage = passwordPreimage(password);
-    } catch (e: any) {
-      setResult(errorResult(e.message));
+    } catch (e: unknown) {
+      setResult(errorResult(e));
       return;
     }
     setBusy(true);
     try {
-      const calldata = claimCalldata({ dropId, passwordPreimage: preimage });
-      const actions: WALLET_API.STRK20_ACTION[] = [
-        { type: "transfer", token: tokenAddr, amount: "OPEN", recipient: address },
-        { type: "invoke", contract: helper, calldata },
-      ];
-      const tx = await submitStrk20(account, index, actions, "Redpocket", setResult);
-      if (!tx) return;
+      const provider = myFrontendProviders[index] as any;
+      const live = await fetchPack(provider, index, dropId);
+      if (!live?.exists || live.slotsLeft === 0) {
+        setResult(errorResult("No shares left on this Redpocket."));
+        return;
+      }
+      try {
+        if (num.toBigInt(live.creatorHash) !== 0n && num.toBigInt(live.creatorHash) === num.toBigInt(creatorHash(address))) {
+          setResult(errorResult("This wallet sealed this Redpocket. Connect a different account to claim a share."));
+          return;
+        }
+      } catch {
+        /* if the hash cannot be compared, let the chain decide */
+      }
+      if (!Number.isInteger(live.slots) || live.slots < 1 || live.slots > 50) {
+        setResult(errorResult("This Redpocket was created with an older app version. Seal a new one on the current network."));
+        return;
+      }
+      const tickets = claimLeaves(preimage, live.slots);
+      const committed = committedLeaves(tickets);
+      const expectedHeight = merkleHeight(live.slots);
+      let tx: Awaited<ReturnType<typeof submitStrk20>>;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const idx = await unusedShareIndex(provider, index, dropId, tickets);
+        if (idx === null) {
+          setResult(errorResult("All shares have already been claimed."));
+          return;
+        }
+        const proof = merkleProof(committed, idx);
+        if (proof.length !== expectedHeight || !merkleVerify(committed[idx], proof, live.merkleRoot)) {
+          setResult(errorResult("Wrong password, or this Redpocket is from an older app version."));
+          return;
+        }
+        const calldata = claimCalldata({
+          dropId,
+          leaf: tickets[idx],
+          proof,
+        });
+        const actions: WALLET_API.STRK20_ACTION[] = [
+          { type: "transfer", token: tokenAddr, amount: "OPEN", recipient: address },
+          { type: "invoke", contract: helper, calldata },
+        ];
+        tx = await submitStrk20(account, index, actions, "Claim into shielded balance", setResult);
+        if (!tx) return;
+        if (tx.confirmed) break;
+        if (!/LEAF_ALREADY_USED/i.test(tx.revertReason ?? "")) return;
+      }
+      if (!tx?.confirmed) return;
+      const before = remaining;
       setClaimed(true);
-    } catch (e: any) {
-      setResult(errorResult(e?.message ?? String(e)));
+      setJustClaimed(true);
+      const pack = await fetchPack(provider, index, dropId);
+      if (pack?.exists) {
+        if (before !== null && pack.remaining <= before) {
+          setPayout(before - pack.remaining);
+        }
+        setRemaining(pack.remaining);
+        setSlotsLeft(pack.slotsLeft);
+        setStatus("Claim landed in your shielded balance.");
+      }
+    } catch (e: unknown) {
+      setResult(errorResult(e));
     } finally {
       setBusy(false);
     }
@@ -141,16 +211,19 @@ function ClaimForm({ dropId }: { dropId: string }) {
       <CopyRow
         label="Redpocket ID"
         value={dropId}
-        hint="On-chain id for this Redpocket. Right password, wrong ID, and you claim a different Redpocket or nothing."
+        hint="This identifies the Redpocket. The same password can be used on more than one, so the ID has to match."
         wrap
       />
       <label className={styles.label}>Password</label>
-      <p className={styles.hint}>Usually already in the link. Each address claims once. The amount is split on the spot into your shielded balance.</p>
+      <p className={styles.hint}>
+        Usually already in the link. Each wallet claims once. Funds go to your shielded balance, not your public wallet.
+      </p>
       <input
         className={styles.field}
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         placeholder="lucky"
+        disabled={busy}
       />
       <p className={styles.note}>{status}</p>
       {exists ? (
@@ -162,13 +235,20 @@ function ClaimForm({ dropId }: { dropId: string }) {
           <span>{slotsLeft ?? "…"} shares · expires {fmtExpiry(expiry)}</span>
         </div>
       ) : null}
-      {expired ? <p className={styles.warn}>Expired. On-chain claims are closed. Leftovers go back to the sender with the same wallet.</p> : null}
-      {empty ? <p className={styles.warn}>All shares claimed.</p> : null}
-      {claimed ? (
+      {expired ? <p className={styles.warn}>Expired. Claims are closed. Unclaimed funds go back to the sender, using the same wallet that created this Redpocket.</p> : null}
+      {empty && !justClaimed ? <p className={styles.warn}>All shares claimed.</p> : null}
+      {justClaimed ? (
+        <p className={styles.okNote}>
+          {payout !== null && tokenMeta
+            ? `${labelAmount(payout, tokenMeta)} landed in this wallet’s shielded STRK20 balance. `
+            : "This share landed in this wallet’s shielded STRK20 balance. "}
+          Open Ready’s private balance, or check it on the <Link href="/">home page</Link>. This address cannot claim again.
+        </p>
+      ) : claimed ? (
         <p className={styles.note}>This wallet already claimed. No second claim.</p>
       ) : connected ? (
         <button className={styles.btnCta} disabled={busy || expired || empty || !exists} onClick={onClaim}>
-          {busy ? "Waiting for wallet…" : "Claim into stealth"}
+          {busyCtaLabel(result, "Claim into shielded balance")}
         </button>
       ) : (
         <SelectWallet variant="cta" />
@@ -185,7 +265,7 @@ function ClaimInner() {
     <Shell>
       <h1 className={styles.h1}>Enter a password to claim</h1>
       <p className={styles.note}>
-        Each Starknet address can claim a Redpocket once. The amount is split on the spot into your shielded balance, not your public wallet.
+        Each wallet can claim a given Redpocket once. Funds go to your shielded balance, not your public wallet. Enable private tokens in Ready on this network before you claim.
       </p>
       <ClaimForm dropId={dropId} />
     </Shell>

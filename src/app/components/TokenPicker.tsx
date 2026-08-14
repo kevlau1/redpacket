@@ -93,7 +93,6 @@ export default function TokenPicker({
   return (
     <>
       <label className={styles.label}>Token</label>
-      <p className={styles.hint}>Mainnet BTC is strkBTC. Sepolia uses WBTC. One Redpocket, one token.</p>
       <div className={styles.chips}>
         {tokens.map((t) => (
           <button

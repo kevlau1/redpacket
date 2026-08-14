@@ -20,7 +20,7 @@ A host sets password `lucky`, 6 STRK (or USDC / ETH, any shieldable token), 6 sh
 
 The helper is only callable by the pool. Dedup uses `tx_info.account_contract_address`, not an address in calldata. Claimed events log amount and remaining shares, not addresses.
 
-Create stores a password hash only. Claim submits the preimage. After the first claim, on-chain observers can see that preimage (same as an Alipay password packet). Mitigations: share cap, one claim per address, STRK20 registration cost.
+Create stores a Merkle root of **committed** tickets `L_i = poseidon(SEALPACK_COMMIT:V1, T_i)` where `T_i = poseidon(SEALPACK_LEAF:V1, password, index)`. Claim submits one unused `T` plus a proof of `L` — never the password. Proof siblings are `L` values, so seeing a claim does not reveal other tickets. Proof length must match the padded tree height. Each Starknet address can still claim only once.
 
 ## Stack
 

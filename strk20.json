@@ -1,6 +1,9 @@
 {
   "transactions": [],
-  "contracts": [],
+  "contracts": [
+    "0x0671dfa406d914e9b422792b698b6cb8f585bc5f6ef789f31d65b46143fdaef5",
+    "0x04ec2a146f05c73ffc4ab6cbf482ef60847499515d8c44be622a6007ffd0c588"
+  ],
   "demo_video": "",
   "demo_url": ""
 }

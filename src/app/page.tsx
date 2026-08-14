@@ -19,7 +19,7 @@ export default function Page() {
             <em>Claim into stealth</em>
           </h1>
           <p className={styles.heroSub}>
-            Set a password, cap the shares, one claim per address. Funds land in your STRK20 shielded balance.
+            Shield tokens into STRK20 first. Then set a password, cap the shares, and send one claim link. Funds land in a shielded balance.
           </p>
         </div>
         <figure className={styles.heroVisual}>
@@ -28,24 +28,30 @@ export default function Page() {
         </figure>
       </header>
 
-      <div className={styles.choices}>
-        <Link className={styles.choice} href="/create">
-          <span className={styles.choiceKicker}>Send</span>
-          <h2>Seal a Redpocket</h2>
-          <p>Set the total, share count, and password. Drop the claim link in a chat. Keep the Redpocket ID and refund secret yourself.</p>
-          <span className={styles.choiceGo}>Create Redpocket</span>
-        </Link>
-        <Link className={styles.choice} href="/claim">
-          <span className={styles.choiceKicker}>Claim</span>
-          <h2>Enter a password to claim</h2>
-          <p>Connect a wallet and enter the password. Funds go to your shielded balance. The same address cannot claim twice.</p>
-          <span className={styles.choiceGo}>Claim Redpocket</span>
-        </Link>
-      </div>
+      <section className={styles.step}>
+        <p className={styles.stepHead}>Step 1 · Shield</p>
+        <div className={styles.shieldWrap}>
+          <ShieldStrip />
+        </div>
+      </section>
 
-      <div className={styles.shieldWrap}>
-        <ShieldStrip />
-      </div>
+      <section className={styles.step}>
+        <p className={styles.stepHead}>Step 2 · Send or claim</p>
+        <div className={styles.choices}>
+          <Link className={styles.choice} href="/create">
+            <span className={styles.choiceKicker}>Send</span>
+            <h2>Seal a Redpocket</h2>
+            <p>After shielding, set the total, share count, and password. Send the claim link. Keep the Redpocket ID and refund secret yourself.</p>
+            <span className={styles.choiceGo}>Create Redpocket</span>
+          </Link>
+          <Link className={styles.choice} href="/claim">
+            <span className={styles.choiceKicker}>Claim</span>
+            <h2>Enter a password to claim</h2>
+            <p>Enable private tokens in Ready on this network, then claim into your shielded balance. Each wallet can claim once.</p>
+            <span className={styles.choiceGo}>Claim Redpocket</span>
+          </Link>
+        </div>
+      </section>
     </Shell>
   );
 }

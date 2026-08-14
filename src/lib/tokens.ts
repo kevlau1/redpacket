@@ -25,7 +25,7 @@ export const KNOWN_TOKENS: TokenDef[] = [
   },
   {
     id: "btc",
-    symbol: "BTC",
+    symbol: "strkBTC",
     name: "strkBTC",
     decimals: 8,
     address: {

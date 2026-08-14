@@ -2,32 +2,19 @@ import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
-const MAX_BODY = 48 * 1024;
+const MAX_BODY = process.env.NODE_ENV === "development" ? 2 * 1024 * 1024 : 48 * 1024;
 const WINDOW_MS = 60_000;
 const MAX_HITS = 90;
 
+/** Only what this dapp’s RpcProvider actually uses. No simulate / class / events. */
 const ALLOWED = new Set([
   "starknet_call",
   "starknet_chainId",
   "starknet_specVersion",
   "starknet_blockNumber",
-  "starknet_blockHashAndNumber",
-  "starknet_getBlockWithTxHashes",
-  "starknet_getBlockWithTxs",
-  "starknet_getBlockTransactionCount",
   "starknet_getTransactionByHash",
   "starknet_getTransactionReceipt",
   "starknet_getTransactionStatus",
-  "starknet_getClass",
-  "starknet_getClassAt",
-  "starknet_getClassHashAt",
-  "starknet_getNonce",
-  "starknet_getStorageAt",
-  "starknet_getEvents",
-  "starknet_getStateUpdate",
-  "starknet_estimateFee",
-  "starknet_simulateTransactions",
-  "starknet_syncing",
 ]);
 
 const hits = new Map<string, { n: number; t: number }>();
@@ -36,6 +23,30 @@ function clientIp(req: NextRequest): string {
   const fwd = req.headers.get("x-forwarded-for");
   if (fwd) return fwd.split(",")[0]?.trim() || "unknown";
   return req.headers.get("x-real-ip") || "unknown";
+}
+
+function requestHost(req: NextRequest): string {
+  return (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").split(",")[0]?.trim().toLowerCase() || "";
+}
+
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/** Browser RpcProvider is same-origin. Reject other sites using this as a public Alchemy proxy. */
+function sameSite(req: NextRequest): boolean {
+  if (process.env.NODE_ENV === "development") return true;
+  const host = requestHost(req);
+  if (!host) return false;
+  const origin = req.headers.get("origin");
+  if (origin) return hostOf(origin) === host;
+  const referer = req.headers.get("referer");
+  if (referer) return hostOf(referer) === host;
+  return false;
 }
 
 function rateLimited(ip: string): boolean {
@@ -61,12 +72,18 @@ function methodsOk(payload: unknown): boolean {
 
 function upstream(network: string): string | null {
   const key = process.env.PROVIDER_URL;
-  if (!key) return null;
-  if (network === "mainnet") {
-    return `https://starknet-mainnet.g.alchemy.com/starknet/version/rpc/v0_10/${key}`;
+  if (key) {
+    if (network === "mainnet") {
+      return `https://starknet-mainnet.g.alchemy.com/starknet/version/rpc/v0_10/${key}`;
+    }
+    if (network === "sepolia") {
+      return `https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/${key}`;
+    }
+    return null;
   }
-  if (network === "sepolia") {
-    return `https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/${key}`;
+  if (process.env.NODE_ENV === "development") {
+    if (network === "mainnet") return "https://api.cartridge.gg/x/starknet/mainnet";
+    if (network === "sepolia") return "https://api.cartridge.gg/x/starknet/sepolia";
   }
   return null;
 }
@@ -75,6 +92,9 @@ export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ network: string }> },
 ) {
+  if (!sameSite(req)) {
+    return Response.json({ error: "RPC origin not allowed" }, { status: 403 });
+  }
   const ip = clientIp(req);
   if (rateLimited(ip)) {
     return Response.json({ error: "Too many RPC requests" }, { status: 429 });

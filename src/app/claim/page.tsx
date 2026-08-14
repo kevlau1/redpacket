@@ -4,11 +4,33 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "../app.module.css";
 import Shell from "../components/Shell";
+import Receipt from "../components/Receipt";
+import { errorResult, type ActionResult } from "@/lib/strk20";
 
 export default function ClaimIndexPage() {
   const router = useRouter();
   const [dropId, setDropId] = useState("");
   const [password, setPassword] = useState("");
+  const [result, setResult] = useState<ActionResult | null>(null);
+
+  function onContinue() {
+    const id = dropId.trim();
+    const pw = password.trim();
+    if (!id && !pw) {
+      setResult(errorResult("Enter a Redpocket ID and a password."));
+      return;
+    }
+    if (!id) {
+      setResult(errorResult("Enter a Redpocket ID."));
+      return;
+    }
+    if (!pw) {
+      setResult(errorResult("Enter a password."));
+      return;
+    }
+    setResult(null);
+    router.push(`/claim/${id}#p=${encodeURIComponent(pw)}`);
+  }
 
   return (
     <Shell>
@@ -19,24 +41,34 @@ export default function ClaimIndexPage() {
       <div className={styles.panel}>
         <label className={styles.label}>Redpocket ID</label>
         <p className={styles.hint}>
-          A long 0x… address. Passwords can repeat (many Redpockets named &quot;lucky&quot;), so the Redpocket ID is what picks the right one.
+          A long 0x… value. Passwords can repeat, so this ID is what selects the right Redpocket.
         </p>
-        <input className={styles.field} value={dropId} onChange={(e) => setDropId(e.target.value)} placeholder="0x…" />
-        <label className={styles.label}>Password</label>
-        <p className={styles.hint}>The passphrase set by the sender. Each Starknet address can claim a Redpocket once.</p>
-        <input className={styles.field} value={password} onChange={(e) => setPassword(e.target.value)} />
-        <button
-          className={styles.btnCta}
-          type="button"
-          onClick={() => {
-            const id = dropId.trim();
-            if (!id) return;
-            const hash = password.trim() ? `#p=${encodeURIComponent(password.trim())}` : "";
-            router.push(`/claim/${id}${hash}`);
+        <input
+          className={styles.field}
+          value={dropId}
+          onChange={(e) => {
+            setDropId(e.target.value);
+            setResult(null);
           }}
-        >
+          placeholder="0x…"
+        />
+        <label className={styles.label}>Password</label>
+        <p className={styles.hint}>Set by the sender. Each wallet can claim a given Redpocket once.</p>
+        <input
+          className={styles.field}
+          value={password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            setResult(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onContinue();
+          }}
+        />
+        <button className={styles.btnCta} type="button" onClick={onContinue}>
           Continue to claim
         </button>
+        {result ? <Receipt r={result} /> : null}
       </div>
     </Shell>
   );

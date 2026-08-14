@@ -7,11 +7,13 @@ import { useFrontendProvider } from "./client/provider/providerContext";
 export default function Receipt({ r }: { r: ActionResult }) {
   const index = useFrontendProvider((s) => s.currentFrontendProviderIndex);
   const cls =
-    r.status === "error"
-      ? styles.receiptError
-      : r.status === "pending"
-        ? styles.receiptPending
-        : styles.receiptOk;
+    r.status === "pending"
+      ? styles.receiptPending
+      : r.title === "Cancelled"
+        ? styles.receiptCancel
+        : r.status === "error"
+          ? styles.receiptError
+          : styles.receiptOk;
   return (
     <div className={`${styles.receipt} ${cls}`}>
       <div className={styles.receiptHead}>{r.title}</div>
@@ -27,7 +29,7 @@ export default function Receipt({ r }: { r: ActionResult }) {
           )}
         </div>
       ))}
-      {r.note ? <pre className={styles.receiptNote}>{r.note}</pre> : null}
+      {r.note ? <p className={styles.receiptNote}>{r.note}</p> : null}
     </div>
   );
 }

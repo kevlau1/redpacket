@@ -8,17 +8,20 @@ import Shell from "../components/Shell";
 import Receipt from "../components/Receipt";
 import SelectWallet from "../components/client/SelectWallet";
 import CopyRow from "../components/CopyRow";
+import ShareMessage from "../components/ShareMessage";
 import TokenPicker, { selectedToken } from "../components/TokenPicker";
 import { useStoreWallet } from "../components/Wallet/walletContext";
 import { useFrontendProvider } from "../components/client/provider/providerContext";
 import { Strk20Networks } from "@/lib/constants";
-import { computeDropId, passwordHash, passwordPreimage, randomFelt, refundHash } from "@/lib/crypto";
-import { claimUrl, savePack } from "@/lib/storage";
+import { claimLeaves, committedLeaves, computeDropId, passwordPreimage, randomFelt, refundHash } from "@/lib/crypto";
+import { merkleRoot } from "@/lib/merkle";
+import { claimUrl, savePack, backupPlaintext, downloadBackup, shareCopy } from "@/lib/storage";
 import {
   createCalldata,
   errorResult,
   helperOrThrow,
   submitStrk20,
+  busyCtaLabel,
   type ActionResult,
 } from "@/lib/strk20";
 import { labelAmount, parseAmount, tokensForNetwork } from "@/lib/tokens";
@@ -44,6 +47,9 @@ export default function CreatePage() {
     password: string;
     refundSecret: string;
     share: string;
+    amountLabel: string;
+    slots: number;
+    network: string;
   } | null>(null);
 
   useEffect(() => {
@@ -93,8 +99,8 @@ export default function CreatePage() {
     try {
       helper = helperOrThrow(index);
       num.toBigInt(token.address);
-    } catch (e: any) {
-      setResult(errorResult(e.message ?? "Invalid token address"));
+    } catch (e: unknown) {
+      setResult(errorResult(e));
       return;
     }
 
@@ -117,9 +123,13 @@ export default function CreatePage() {
         setResult(errorResult("Total is too small. Each share needs a little."));
         return;
       }
+      if (amount > (1n << 128n) - 1n) {
+        setResult(errorResult("Total is too large for the on-chain amount limit."));
+        return;
+      }
       preimage = passwordPreimage(password);
-    } catch (e: any) {
-      setResult(errorResult(e.message ?? "Invalid input"));
+    } catch (e: unknown) {
+      setResult(errorResult(e));
       return;
     }
 
@@ -127,11 +137,11 @@ export default function CreatePage() {
     try {
       const refundSecret = randomFelt();
       const refundCommitment = num.toHex(refundHash(refundSecret));
-      const passHash = passwordHash(preimage);
+      const root = merkleRoot(committedLeaves(claimLeaves(preimage, n)));
       const expiry = BigInt(Math.floor(Date.now() / 1000) + Math.floor(dayN * 86400));
       const random = split === "random";
       const id = computeDropId({
-        passwordHash: passHash,
+        merkleRoot: root,
         refundCommitment,
         token: token.address,
         amount,
@@ -147,7 +157,7 @@ export default function CreatePage() {
         slots: n,
         expiry,
         refundCommitment,
-        passwordHash: passHash,
+        merkleRoot: root,
         random,
       });
 
@@ -157,7 +167,8 @@ export default function CreatePage() {
       ];
 
       const tx = await submitStrk20(account, index, actions, labelAmount(amount, token), setResult);
-      if (!tx) return;
+      if (!tx?.hash) return;
+      if (!tx.confirmed && typeof tx.revertReason === "string") return;
 
       savePack({
         dropId: id,
@@ -171,15 +182,19 @@ export default function CreatePage() {
         refundSecret,
         random,
         createdAt: Date.now(),
+        creator: account.address,
       });
       setCreated({
         dropId: id,
         password: password.trim(),
         refundSecret,
         share: claimUrl(window.location.origin, id, password.trim()),
+        amountLabel: labelAmount(amount, token),
+        slots: n,
+        network: Strk20Networks[index] ?? String(index),
       });
-    } catch (e: any) {
-      setResult(errorResult(e?.message ?? String(e)));
+    } catch (e: unknown) {
+      setResult(errorResult(e));
     } finally {
       setBusy(false);
     }
@@ -189,12 +204,12 @@ export default function CreatePage() {
     <Shell>
       <h1 className={styles.h1}>Seal a Redpocket</h1>
       <p className={styles.note}>
-        Share the claim link in chat. Each wallet can claim a Redpocket once. Funds go to a shielded balance. One token per Redpocket. Shield tokens into the privacy pool first.
+        Shield on the home page first. Then seal from that shielded balance. Share only the claim link. Keep the refund secret — unclaimed funds come back only if you refund after expiry with the same wallet.
       </p>
       <div className={styles.panel}>
         <label className={styles.label}>Password</label>
-        <p className={styles.hint}>The passphrase you send to the group. After the first claim, on-chain observers can see it too.</p>
-        <input className={styles.field} value={password} onChange={(e) => setPassword(e.target.value)} />
+        <p className={styles.hint}>Share this with people who should claim. It is not written on-chain.</p>
+        <input className={styles.field} value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} />
         <TokenPicker
           index={index}
           selectedId={tokenId}
@@ -205,72 +220,110 @@ export default function CreatePage() {
         />
         <p className={styles.hint}>Deducted from your shielded balance. Public-wallet funds must be shielded on the home page first.</p>
         <label className={styles.label}>Total ({token?.symbol ?? "TOKEN"})</label>
-        <input className={styles.field} value={total} onChange={(e) => setTotal(e.target.value)} />
+        <input className={styles.field} value={total} onChange={(e) => setTotal(e.target.value)} disabled={busy} />
         <div className={styles.row2}>
           <div>
             <label className={styles.label}>Shares</label>
-            <p className={styles.hint}>1-50. Each address can claim 1 share.</p>
-            <input className={styles.field} value={count} onChange={(e) => setCount(e.target.value)} />
+            <p className={styles.hint}>1–50. Each wallet can claim once.</p>
+            <input className={styles.field} value={count} onChange={(e) => setCount(e.target.value)} disabled={busy} />
           </div>
           <div>
             <label className={styles.label}>Expiry (days)</label>
             <p className={styles.hint}>It does not auto-refund. Use the same wallet to refund after expiry.</p>
-            <input className={styles.field} value={days} onChange={(e) => setDays(e.target.value)} />
+            <input className={styles.field} value={days} onChange={(e) => setDays(e.target.value)} disabled={busy} />
           </div>
         </div>
         <label className={styles.label}>Split</label>
-        <p className={styles.hint}>Random uses a WeChat-style split. Equal remainder goes to the last share.</p>
         <div className={styles.seg}>
-          <button className={split === "equal" ? styles.on : ""} onClick={() => setSplit("equal")} type="button">
+          <button className={split === "equal" ? styles.on : ""} onClick={() => setSplit("equal")} type="button" disabled={busy}>
             Equal
           </button>
-          <button className={split === "random" ? styles.on : ""} onClick={() => setSplit("random")} type="button">
+          <button className={split === "random" ? styles.on : ""} onClick={() => setSplit("random")} type="button" disabled={busy}>
             Random
           </button>
         </div>
+        <div className={styles.segCaptions}>
+          <p>Same amount each claim</p>
+          <p>Different amounts. Last claim takes the rest</p>
+        </div>
         {connected ? (
           <button className={styles.btnCta} disabled={busy || (tokenId === "custom" && customDecimals === null)} onClick={onCreate}>
-            {busy ? "Waiting for wallet…" : "Seal from shielded balance"}
+            {busyCtaLabel(result, "Seal from shielded balance")}
           </button>
         ) : (
           <SelectWallet variant="cta" />
         )}
         {result ? <Receipt r={result} /> : null}
         {created ? (
-          <div className={styles.backup}>
-            <div className={styles.backupTitle}>Back this up now. Another browser will not have it.</div>
-            <p className={styles.warn}>
-              Redpocket ID is for people who only have the password. The refund secret is yours: after expiry, use the <strong>same wallet</strong> to pull leftovers back into stealth.
-            </p>
-            <CopyRow
-              label="Claim link"
-              value={created.share}
-              hint="This one line is enough for the group. It already includes Redpocket ID and password."
+          <div>
+            <ShareMessage
+              text={shareCopy({
+                share: created.share,
+                password: created.password,
+                amountLabel: created.amountLabel,
+                slots: created.slots,
+                network: created.network,
+              })}
             />
-            <CopyRow label="Redpocket ID" value={created.dropId} hint="If someone only has the password, they still need this on the claim page." wrap />
-            <CopyRow label="Password" value={created.password} />
-            <CopyRow
-              label="Refund secret"
-              value={created.refundSecret}
-              hint="Do not send this to the group. If you lose it and switch devices, leftover funds may be unrecoverable."
-              wrap
-            />
-            <button
-              className={styles.copy}
-              type="button"
-              onClick={() =>
-                navigator.clipboard.writeText(
-                  [
-                    `Claim link: ${created.share}`,
-                    `Redpocket ID: ${created.dropId}`,
-                    `Password: ${created.password}`,
-                    `Refund secret: ${created.refundSecret}`,
-                  ].join("\n"),
-                )
-              }
-            >
-              Copy full backup
-            </button>
+            <div className={styles.backup}>
+              <div className={styles.backupTitle}>Back this up now. Another browser will not have it.</div>
+              <p className={styles.warn}>
+                Redpocket ID is for people who only have the password. The refund secret is yours: after expiry, use the <strong>same wallet</strong> to return unclaimed funds to your shielded balance. Download or copy a backup before you close this tab.
+              </p>
+              {created.share.includes("localhost") ? (
+                <p className={styles.warn}>
+                  This claim link uses localhost. It only opens on this computer. Replace the host with your public URL before sending it to anyone else.
+                </p>
+              ) : null}
+              <CopyRow
+                label="Claim link"
+                value={created.share}
+                hint="This is enough to send. It already includes the Redpocket ID and password."
+              />
+              <CopyRow label="Redpocket ID" value={created.dropId} hint="Needed on the claim page if someone has the password but not the link." wrap />
+              <CopyRow label="Password" value={created.password} />
+              <CopyRow
+                label="Refund secret"
+                value={created.refundSecret}
+                hint="Do not send this with the claim link. If you lose it, unclaimed funds may be stuck after expiry."
+                wrap
+              />
+              <div className={styles.backupActions}>
+                <button
+                  className={styles.copy}
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard.writeText(
+                      backupPlaintext({
+                        dropId: created.dropId,
+                        password: created.password,
+                        refundSecret: created.refundSecret,
+                        share: created.share,
+                      }),
+                    )
+                  }
+                >
+                  Copy full backup
+                </button>
+                <button
+                  className={styles.copy}
+                  type="button"
+                  onClick={() =>
+                    downloadBackup(
+                      `redpocket-${created.dropId.slice(0, 10)}.txt`,
+                      backupPlaintext({
+                        dropId: created.dropId,
+                        password: created.password,
+                        refundSecret: created.refundSecret,
+                        share: created.share,
+                      }),
+                    )
+                  }
+                >
+                  Download backup file
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
       </div>

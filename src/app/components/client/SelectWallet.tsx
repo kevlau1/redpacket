@@ -3,14 +3,10 @@ import styles from "../../app.module.css";
 import { useStoreWallet } from "../Wallet/walletContext";
 import { useFrontendProvider } from "./provider/providerContext";
 import { useEffect, useState } from "react";
-import {
-  WalletAccountV6,
-  constants as SNconstants,
-  validateAndParseAddress,
-  walletV6,
-} from "starknet";
+import { WalletAccountV6, validateAndParseAddress, walletV6 } from "starknet";
 import { WALLET_API } from "@starknet-io/types-js";
-import { myFrontendProviders } from "@/lib/constants";
+import { myFrontendProviders, providerIndexForChain } from "@/lib/constants";
+import { friendlyError } from "@/lib/strk20";
 import { createStore, type Store } from "@starknet-io/get-starknet-discovery";
 import type { WalletWithStarknetFeatures } from "@starknet-io/get-starknet-wallet-standard/features";
 
@@ -21,6 +17,7 @@ function normalizeId(s: string): string {
 export default function SelectWallet({ variant = "nav" }: { variant?: "nav" | "cta" }) {
   const setMyWallet = useStoreWallet((s) => s.setMyStarknetWalletObject);
   const setMyWalletAccount = useStoreWallet((s) => s.setMyWalletAccount);
+  const StarknetWalletObject = useStoreWallet((s) => s.StarknetWalletObject);
   const { setCurrentFrontendProviderIndex } = useFrontendProvider((s) => s);
   const isConnected = useStoreWallet((s) => s.isConnected);
   const setConnected = useStoreWallet((s) => s.setConnected);
@@ -30,6 +27,7 @@ export default function SelectWallet({ variant = "nav" }: { variant?: "nav" | "c
   const setAddressAccount = useStoreWallet((s) => s.setAddressAccount);
 
   const [connecting, setConnecting] = useState(false);
+  const [connectingName, setConnectingName] = useState("");
   const [error, setError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [wallets, setWallets] = useState<WalletWithStarknetFeatures[]>([]);
@@ -49,33 +47,83 @@ export default function SelectWallet({ variant = "nav" }: { variant?: "nav" | "c
   async function handleSelectedWallet(selectedWallet: WalletWithStarknetFeatures) {
     setMyWallet(selectedWallet);
     const result = await walletV6.requestAccounts(selectedWallet);
-    if (typeof result === "string") return;
-    if (Array.isArray(result)) {
-      setAddressAccount(validateAndParseAddress(result[0]));
+    if (typeof result === "string") {
+      throw new Error(result);
     }
+    if (!Array.isArray(result) || result.length === 0) {
+      throw new Error("user rejected the request");
+    }
+    setAddressAccount(validateAndParseAddress(result[0]));
     const isConnectedWallet = await walletV6
       .getPermissions(selectedWallet)
       .then((res: any) => (res as WALLET_API.Permission[]).includes(WALLET_API.Permission.ACCOUNTS));
     setConnected(isConnectedWallet);
-    if (!isConnectedWallet) return;
-    const chainId = (await walletV6.requestChainId(selectedWallet)) as string;
+    if (!isConnectedWallet) {
+      throw new Error("Ready did not grant account access. Approve the connection and try again.");
+    }
+    const chainId = String(await walletV6.requestChainId(selectedWallet));
     setChain(chainId);
-    const providerIndex = chainId === SNconstants.StarknetChainId.SN_MAIN ? 0 : 2;
+    const providerIndex = providerIndexForChain(chainId);
     setCurrentFrontendProviderIndex(providerIndex);
     const myWA = await WalletAccountV6.connect(myFrontendProviders[providerIndex], selectedWallet);
     setMyWalletAccount(myWA);
   }
 
+  useEffect(() => {
+    if (!isConnected || !StarknetWalletObject) return;
+    const wallet = StarknetWalletObject;
+    let cancelled = false;
+    let lastChain = "";
+    let lastIndex = -1;
+
+    async function syncFromWallet() {
+      try {
+        const chainId = String(await walletV6.requestChainId(wallet));
+        if (cancelled) return;
+        const idx = providerIndexForChain(chainId);
+        if (chainId === lastChain && idx === lastIndex) return;
+        lastChain = chainId;
+        lastIndex = idx;
+        setChain(chainId);
+        setCurrentFrontendProviderIndex(idx);
+        const myWA = await WalletAccountV6.connect(myFrontendProviders[idx], wallet);
+        if (!cancelled) setMyWalletAccount(myWA);
+      } catch {
+        /* wallet may be mid-switch */
+      }
+    }
+
+    void syncFromWallet();
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = walletV6.subscribeWalletEvent(wallet, () => {
+        void syncFromWallet();
+      });
+    } catch {
+      /* older wallets */
+    }
+    const timer = window.setInterval(() => {
+      void syncFromWallet();
+    }, 5000);
+    return () => {
+      cancelled = true;
+      unsub?.();
+      window.clearInterval(timer);
+    };
+  }, [isConnected, StarknetWalletObject, setChain, setCurrentFrontendProviderIndex, setMyWalletAccount]);
+
   async function selectWallet(w: WalletWithStarknetFeatures) {
     setError("");
     setConnecting(true);
+    setConnectingName(w.name);
     try {
       await handleSelectedWallet(w);
       setPickerOpen(false);
-    } catch (err: any) {
-      setError(err?.message ?? "Connection failed");
+    } catch (err: unknown) {
+      setError(friendlyError(err));
     } finally {
       setConnecting(false);
+      setConnectingName("");
     }
   }
 
@@ -107,6 +155,9 @@ export default function SelectWallet({ variant = "nav" }: { variant?: "nav" | "c
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img className={styles.walletIcon} src={w.icon} alt="" />
                 <span className={styles.walletName}>{w.name}</span>
+                {connecting && connectingName === w.name ? (
+                  <span className={styles.walletStatus}>Connecting…</span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -119,6 +170,9 @@ export default function SelectWallet({ variant = "nav" }: { variant?: "nav" | "c
             .
           </div>
         )}
+        {connecting ? (
+          <p className={styles.walletHint}>Approve the connection in Ready. Keep this tab open.</p>
+        ) : null}
         {error ? <div className={styles.errorText}>{error}</div> : null}
       </div>
     </div>
@@ -127,8 +181,8 @@ export default function SelectWallet({ variant = "nav" }: { variant?: "nav" | "c
   if (variant === "cta") {
     return (
       <>
-        <button className={styles.btnCta} onClick={() => setPickerOpen(true)}>
-          Connect Ready wallet
+        <button className={styles.btnCta} disabled={connecting} onClick={() => setPickerOpen(true)}>
+          {connecting ? "Connecting…" : "Connect Ready wallet"}
         </button>
         {picker}
       </>
@@ -138,7 +192,14 @@ export default function SelectWallet({ variant = "nav" }: { variant?: "nav" | "c
   if (isConnected && address) {
     return (
       <>
-        <button className={styles.addrPill} onClick={() => disconnect()} title="Disconnect">
+        <button
+          className={styles.addrPill}
+          onClick={() => {
+            disconnect();
+            setCurrentFrontendProviderIndex(0);
+          }}
+          title="Disconnect"
+        >
           <span className={styles.addrDot} />
           {shortAddr}
         </button>
@@ -149,8 +210,8 @@ export default function SelectWallet({ variant = "nav" }: { variant?: "nav" | "c
 
   return (
     <>
-      <button className={styles.connectPill} onClick={() => setPickerOpen(true)}>
-        Connect wallet
+      <button className={styles.connectPill} disabled={connecting} onClick={() => setPickerOpen(true)}>
+        {connecting ? "Connecting…" : "Connect wallet"}
       </button>
       {picker}
     </>

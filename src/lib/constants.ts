@@ -1,4 +1,4 @@
-import { ProviderInterface, RpcProvider } from "starknet";
+import { ProviderInterface, RpcProvider, constants as SNconstants, num } from "starknet";
 
 export const ADDR_STRK =
   "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
@@ -33,6 +33,23 @@ export const Strk20Networks: Record<number, string> = {
   0: "MAINNET",
   2: "SEPOLIA",
 };
+
+/** Map a wallet chain id (hex, SN_MAIN, or name) to a frontend provider index. Unknown → Mainnet. */
+export function providerIndexForChain(chainId: unknown): number {
+  if (chainId == null || chainId === "") return 0;
+  const raw = String(chainId).trim();
+  const upper = raw.toUpperCase();
+  if (upper === "SN_MAIN" || upper === "SN_MAINNET" || upper === "MAINNET") return 0;
+  if (upper === "SN_SEPOLIA" || upper.includes("SEPOLIA")) return 2;
+  try {
+    const n = num.toBigInt(raw);
+    if (n === num.toBigInt(SNconstants.StarknetChainId.SN_MAIN)) return 0;
+    if (n === num.toBigInt(SNconstants.StarknetChainId.SN_SEPOLIA)) return 2;
+  } catch {
+    /* not a hex id */
+  }
+  return 0;
+}
 
 export const REDPOCKET_MAINNET =
   process.env.NEXT_PUBLIC_REDPOCKET_MAINNET ?? process.env.NEXT_PUBLIC_SEALPACK_MAINNET ?? "0x0";

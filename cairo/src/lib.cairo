@@ -10,9 +10,10 @@ pub struct OpenNoteDeposit {
 
 #[derive(Serde, Copy, Drop, PartialEq, Debug, starknet::Store)]
 pub struct Pack {
-    pub password_hash: felt252,
+    pub merkle_root: felt252,
     pub token: ContractAddress,
     pub remaining: u128,
+    pub slots: u32,
     pub slots_left: u32,
     pub expiry: u64,
     pub refund_hash: felt252,
@@ -32,6 +33,9 @@ pub const DROP_ID_TAG: felt252 = 'SEALPACK_DROP:V1';
 pub const REFUND_TAG: felt252 = 'SEALPACK_REFUND:V1';
 pub const CREATOR_TAG: felt252 = 'SEALPACK_CREATOR:V1';
 pub const CLAIMED_TAG: felt252 = 'SEALPACK_CLAIMED:V1';
+pub const USED_TAG: felt252 = 'SEALPACK_USED:V1';
+pub const LEAF_TAG: felt252 = 'SEALPACK_LEAF:V1';
+pub const COMMIT_TAG: felt252 = 'SEALPACK_COMMIT:V1';
 pub const MAX_SLOTS: u32 = 50;
 
 pub mod errors {
@@ -58,6 +62,10 @@ pub mod errors {
     pub const AMOUNT_TOO_SMALL: felt252 = 'AMOUNT_TOO_SMALL';
     pub const PACK_EXPIRED: felt252 = 'PACK_EXPIRED';
     pub const NOT_CREATOR: felt252 = 'NOT_CREATOR';
+    pub const BAD_MERKLE: felt252 = 'BAD_MERKLE_PROOF';
+    pub const BAD_PROOF_LEN: felt252 = 'BAD_PROOF_LEN';
+    pub const LEAF_USED: felt252 = 'LEAF_ALREADY_USED';
+    pub const ZERO_ROOT: felt252 = 'ZERO_MERKLE_ROOT';
 }
 
 #[starknet::interface]
@@ -82,8 +90,54 @@ pub fn claimed_key(drop_id: felt252, account: ContractAddress) -> felt252 {
     core::poseidon::poseidon_hash_span(array![CLAIMED_TAG, drop_id, account.into()].span())
 }
 
+pub fn leaf_used_key(drop_id: felt252, leaf: felt252) -> felt252 {
+    core::poseidon::poseidon_hash_span(array![USED_TAG, drop_id, leaf].span())
+}
+
+pub fn claim_leaf(preimage: felt252, index: felt252) -> felt252 {
+    core::poseidon::poseidon_hash_span(array![LEAF_TAG, preimage, index].span())
+}
+
+pub fn commit_leaf(ticket: felt252) -> felt252 {
+    core::poseidon::poseidon_hash_span(array![COMMIT_TAG, ticket].span())
+}
+
+pub fn merkle_height(slots: u32) -> u32 {
+    let mut n: u32 = 1;
+    while n < slots {
+        n *= 2;
+    }
+    let mut h: u32 = 0;
+    let mut x = n;
+    while x > 1 {
+        x /= 2;
+        h += 1;
+    }
+    h
+}
+
+pub fn hash_pair(a: felt252, b: felt252) -> felt252 {
+    let au: u256 = a.into();
+    let bu: u256 = b.into();
+    if au < bu {
+        core::poseidon::poseidon_hash_span(array![a, b].span())
+    } else {
+        core::poseidon::poseidon_hash_span(array![b, a].span())
+    }
+}
+
+pub fn merkle_verify(leaf: felt252, proof: Span<felt252>, root: felt252) -> bool {
+    let mut computed = leaf;
+    let mut i = 0_usize;
+    while i < proof.len() {
+        computed = hash_pair(computed, *proof.at(i));
+        i += 1;
+    }
+    computed == root
+}
+
 pub fn compute_drop_id(
-    pass_hash: felt252,
+    merkle_root: felt252,
     refund_commitment: felt252,
     token: ContractAddress,
     amount: u128,
@@ -99,7 +153,7 @@ pub fn compute_drop_id(
     core::poseidon::poseidon_hash_span(
         array![
             DROP_ID_TAG,
-            pass_hash,
+            merkle_root,
             refund_commitment,
             token.into(),
             amount.into(),
@@ -167,6 +221,7 @@ pub trait ISealpack<TState> {
         secret: felt252,
         random: u8,
         note_id: felt252,
+        merkle_proof: Span<felt252>,
     ) -> Span<OpenNoteDeposit>;
 
     fn get_pack(self: @TState, drop_id: felt252) -> Pack;
@@ -187,8 +242,8 @@ mod Sealpack {
     };
     use super::{
         IErc20Dispatcher, IErc20DispatcherTrait, ISealpack, OpenNoteDeposit, Op, Pack,
-        compute_drop_id, claimed_key, creator_hash, errors, next_payout, password_hash, refund_hash,
-        MAX_SLOTS,
+        compute_drop_id, claimed_key, commit_leaf, creator_hash, errors, leaf_used_key,
+        merkle_height, merkle_verify, next_payout, refund_hash, MAX_SLOTS,
     };
 
     #[storage]
@@ -292,6 +347,7 @@ mod Sealpack {
             secret: felt252,
             random: u8,
             note_id: felt252,
+            merkle_proof: Span<felt252>,
         ) -> Span<OpenNoteDeposit> {
             let privacy = assert_pool(@self);
 
@@ -302,19 +358,20 @@ mod Sealpack {
                     assert(slots.is_non_zero(), errors::ZERO_SLOTS);
                     assert(slots <= MAX_SLOTS, errors::TOO_MANY_SLOTS);
                     assert(amount >= slots.into(), errors::AMOUNT_TOO_SMALL);
-                    assert(secret.is_non_zero(), errors::ZERO_PASSWORD);
+                    assert(secret.is_non_zero(), errors::ZERO_ROOT);
                     assert(refund_commitment.is_non_zero(), errors::ZERO_REFUND_HASH);
                     assert(expiry > get_block_timestamp(), errors::EXPIRY_IN_PAST);
 
-                    // `secret` on Create is the password hash. The preimage is only
-                    // sent later on Claim, so the 口令 is not in the create calldata.
-                    let pass_hash = secret;
+                    // `secret` on Create is the Merkle root of committed tickets
+                    // L_i = poseidon(SEALPACK_COMMIT:V1, poseidon(SEALPACK_LEAF:V1, pw, i)).
+                    // Claim submits ticket T, never the password; proof siblings are L_i.
+                    let merkle_root = secret;
                     let is_random = random != 0;
                     let expected_id = compute_drop_id(
-                        pass_hash, refund_commitment, token, amount, slots, expiry, is_random,
+                        merkle_root, refund_commitment, token, amount, slots, expiry, is_random,
                     );
                     assert(drop_id == expected_id, errors::DROP_ID_MISMATCH);
-                    assert(self.packs.read(drop_id).password_hash.is_zero(), errors::DROP_EXISTS);
+                    assert(self.packs.read(drop_id).merkle_root.is_zero(), errors::DROP_EXISTS);
 
                     credit_locked(ref self, token, amount);
                     let creator = get_tx_info().unbox().account_contract_address;
@@ -323,9 +380,10 @@ mod Sealpack {
                         .write(
                             drop_id,
                             Pack {
-                                password_hash: pass_hash,
+                                merkle_root,
                                 token,
                                 remaining: amount,
+                                slots,
                                 slots_left: slots,
                                 expiry,
                                 refund_hash: refund_commitment,
@@ -339,14 +397,19 @@ mod Sealpack {
                 Op::Claim => {
                     assert(secret.is_non_zero(), errors::ZERO_PASSWORD);
                     let pack = self.packs.read(drop_id);
-                    assert(pack.password_hash.is_non_zero(), errors::DROP_NOT_FOUND);
+                    assert(pack.merkle_root.is_non_zero(), errors::DROP_NOT_FOUND);
                     assert(pack.slots_left.is_non_zero(), errors::NO_SLOTS);
                     assert(get_block_timestamp() < pack.expiry, errors::PACK_EXPIRED);
-                    assert(password_hash(secret) == pack.password_hash, errors::BAD_PASSWORD);
+                    let height: u32 = merkle_height(pack.slots);
+                    assert(merkle_proof.len() == height.into(), errors::BAD_PROOF_LEN);
+                    let committed = commit_leaf(secret);
+                    assert(merkle_verify(committed, merkle_proof, pack.merkle_root), errors::BAD_MERKLE);
 
                     let claimer = get_tx_info().unbox().account_contract_address;
                     let ticket = claimed_key(drop_id, claimer);
                     assert(!self.claimed.read(ticket), errors::ALREADY_CLAIMED);
+                    let used = leaf_used_key(drop_id, secret);
+                    assert(!self.claimed.read(used), errors::LEAF_USED);
 
                     let payout = next_payout(
                         drop_id,
@@ -361,6 +424,7 @@ mod Sealpack {
                     assert(pack.remaining >= payout, errors::INSUFFICIENT_REMAINING);
 
                     self.claimed.write(ticket, true);
+                    self.claimed.write(used, true);
                     let slots_left = pack.slots_left - 1;
                     self
                         .packs
@@ -376,7 +440,7 @@ mod Sealpack {
                 },
                 Op::Refund => {
                     let pack = self.packs.read(drop_id);
-                    assert(pack.password_hash.is_non_zero(), errors::DROP_NOT_FOUND);
+                    assert(pack.merkle_root.is_non_zero(), errors::DROP_NOT_FOUND);
                     assert(pack.remaining.is_non_zero(), errors::NOTHING_TO_REFUND);
                     assert(get_block_timestamp() >= pack.expiry, errors::NOT_EXPIRED);
                     let who = get_tx_info().unbox().account_contract_address;
@@ -399,7 +463,10 @@ mod Sealpack {
 #[cfg(test)]
 mod tests {
     use starknet::contract_address_const;
-    use super::{creator_hash, next_payout, password_hash, refund_hash};
+    use super::{
+        claim_leaf, commit_leaf, creator_hash, hash_pair, merkle_height, merkle_verify, next_payout,
+        password_hash, refund_hash,
+    };
 
     fn nobody() -> starknet::ContractAddress {
         contract_address_const::<0>()
@@ -440,5 +507,51 @@ mod tests {
             password_hash(7)
                 == 0x6989971fba648844c46ddcc0daa05321991cd64b70554e6dd5d5dc8f84b81c1,
         );
+    }
+
+    #[test]
+    fn hash_pair_matches_js_vector() {
+        // hashPair(1, 2) sorted Poseidon
+        assert!(
+            hash_pair(1, 2)
+                == 0x371cb6995ea5e7effcd2e174de264b5b407027a75a231a70c2c8d196107f0e7,
+        );
+        assert!(hash_pair(1, 2) == hash_pair(2, 1));
+    }
+
+    #[test]
+    fn merkle_verify_two_leaves() {
+        let root = hash_pair(1, 2);
+        let proof = array![2].span();
+        assert!(merkle_verify(1, proof, root));
+        assert!(!merkle_verify(3, proof, root));
+    }
+
+    #[test]
+    fn merkle_height_matches_padded_tree() {
+        assert!(merkle_height(1) == 0);
+        assert!(merkle_height(2) == 1);
+        assert!(merkle_height(3) == 2);
+        assert!(merkle_height(4) == 2);
+        assert!(merkle_height(50) == 6);
+    }
+
+    #[test]
+    fn committed_ticket_padded_tree() {
+        let t0 = claim_leaf(7, 0);
+        let t1 = claim_leaf(7, 1);
+        let t2 = claim_leaf(7, 2);
+        let l0 = commit_leaf(t0);
+        let l1 = commit_leaf(t1);
+        let l2 = commit_leaf(t2);
+        let l3: felt252 = 0;
+        let n1 = hash_pair(l0, l1);
+        let n2 = hash_pair(l2, l3);
+        let root = hash_pair(n1, n2);
+        let proof = array![l1, n2].span();
+        assert!(merkle_verify(commit_leaf(t0), proof, root));
+        assert!(!merkle_verify(t0, proof, root));
+        assert!(merkle_height(3) == 2);
+        assert!(proof.len() == 2);
     }
 }

@@ -7,16 +7,19 @@ import Shell from "../components/Shell";
 import Receipt from "../components/Receipt";
 import { useStoreWallet } from "../components/Wallet/walletContext";
 import { useFrontendProvider } from "../components/client/provider/providerContext";
+import { num } from "starknet";
 import { myFrontendProviders } from "@/lib/constants";
 import CopyRow from "../components/CopyRow";
-import { fmtExpiry, shortHex } from "@/lib/format";
+import ShareMessage from "../components/ShareMessage";
+import { fmtExpiry } from "@/lib/format";
 import { fetchPack } from "@/lib/onchain";
-import { claimUrl, listPacks, type StoredPack } from "@/lib/storage";
+import { claimUrl, listPacks, backupPlaintext, downloadBackup, shareCopy, type StoredPack } from "@/lib/storage";
 import {
   errorResult,
   helperOrThrow,
   refundCalldata,
   submitStrk20,
+  busyCtaLabel,
   type ActionResult,
 } from "@/lib/strk20";
 import { labelAmount, resolveToken } from "@/lib/tokens";
@@ -31,6 +34,7 @@ export default function MinePage() {
   const [remaining, setRemaining] = useState<Record<string, string>>({});
   const [onchainToken, setOnchainToken] = useState<Record<string, string>>({});
   const [onchainFail, setOnchainFail] = useState<Record<string, boolean>>({});
+  const [refundBusy, setRefundBusy] = useState<string | null>(null);
 
   useEffect(() => {
     setPacks(listPacks());
@@ -59,11 +63,12 @@ export default function MinePage() {
       setResult(errorResult("Connect a wallet first"));
       return;
     }
+    setRefundBusy(p.dropId);
     try {
       const helper = helperOrThrow(index);
       const token = onchainToken[p.dropId];
       if (!token) {
-        setResult(errorResult("On-chain token not loaded. Refund is disabled until get_pack succeeds."));
+        setResult(errorResult("Token not loaded from the chain yet. Refund stays disabled until it is."));
         return;
       }
       const meta = resolveToken(token, index);
@@ -75,9 +80,19 @@ export default function MinePage() {
         { type: "transfer", token, amount: "OPEN", recipient: address },
         { type: "invoke", contract: helper, calldata },
       ];
-      await submitStrk20(account, index, actions, `leftover ${meta.symbol}`, setResult);
-    } catch (e: any) {
-      setResult(errorResult(e?.message ?? String(e)));
+      const tx = await submitStrk20(account, index, actions, `unclaimed ${meta.symbol}`, setResult);
+      if (!tx?.hash) return;
+      const on = await fetchPack(myFrontendProviders[index] as any, index, p.dropId);
+      if (on?.exists) {
+        setRemaining((m) => ({
+          ...m,
+          [p.dropId]: `${on.remaining.toString()}|${on.slotsLeft}`,
+        }));
+      }
+    } catch (e: unknown) {
+      setResult(errorResult(e));
+    } finally {
+      setRefundBusy(null);
     }
   }
 
@@ -85,7 +100,7 @@ export default function MinePage() {
     <Shell>
       <h1 className={styles.h1}>Redpockets I sent</h1>
       <p className={styles.note}>
-        Password, Redpocket ID, and refund secret live in this browser. Refunds must use the same wallet that created the Redpocket. Expiry does not auto-refund. Copy a backup before you switch devices or clear cache.
+        Password, Redpocket ID, and refund secret live in this browser. Download a backup before you switch devices. Refunds must use the same wallet that created the Redpocket. Expiry does not auto-refund.
       </p>
       {result ? <Receipt r={result} /> : null}
       {packs.length === 0 ? (
@@ -98,6 +113,15 @@ export default function MinePage() {
             ...resolveToken(onchainToken[p.dropId] ?? p.token, index),
             decimals: p.decimals ?? resolveToken(onchainToken[p.dropId] ?? p.token, index).decimals,
           };
+          const leftover = rem ? BigInt(rem) : null;
+          const wrongCreator = (() => {
+            if (!p.creator || !address) return false;
+            try {
+              return num.toBigInt(p.creator) !== num.toBigInt(address);
+            } catch {
+              return true;
+            }
+          })();
           return (
             <div key={p.dropId} className={styles.panel}>
               <div className={styles.meta}>
@@ -112,39 +136,77 @@ export default function MinePage() {
                     : "…"}
                 </span>
               </div>
+              <ShareMessage
+                text={shareCopy({
+                  share: url,
+                  password: p.password,
+                  amountLabel: labelAmount(BigInt(p.total), token),
+                  slots: p.slots,
+                  network: p.network,
+                })}
+              />
               <CopyRow
                 label="Redpocket ID"
                 value={p.dropId}
-                hint="If someone has the password but no link, they need this on the claim page."
+                hint="Needed on the claim page if someone has the password but not the link."
                 wrap
               />
-              <CopyRow label="Password" value={p.password} hint="The passphrase for the group. Do not send it with the refund secret." />
+              <CopyRow label="Password" value={p.password} hint="The password for people claiming. Do not send it with the refund secret." />
               <CopyRow
                 label="Claim link"
                 value={url}
-                hint="The link already includes Redpocket ID and password. Send this one line."
+                hint="Already includes the Redpocket ID and password. This is what you send."
               />
               <CopyRow
                 label="Refund secret"
                 value={p.refundSecret}
-                hint="Keep this to yourself. After expiry, refund with the same wallet below."
+                hint="Keep this private. After expiry, refund with the same wallet below."
                 wrap
               />
-              <p className={styles.hint}>On-chain short id {shortHex(p.dropId)} · Refund stays disabled until expiry and the on-chain token is loaded.</p>
+              <div className={styles.backupActions}>
+                <button
+                  className={styles.copy}
+                  type="button"
+                  onClick={() =>
+                    downloadBackup(
+                      `redpocket-${p.dropId.slice(0, 10)}.txt`,
+                      backupPlaintext({
+                        dropId: p.dropId,
+                        password: p.password,
+                        refundSecret: p.refundSecret,
+                        share: url,
+                        network: p.network,
+                      }),
+                    )
+                  }
+                >
+                  Download backup file
+                </button>
+              </div>
+              {wrongCreator ? (
+                <p className={styles.warn}>
+                  This wallet did not create this Redpocket. Refund must use the same wallet that sealed it.
+                </p>
+              ) : null}
+              <p className={styles.hint}>Refund stays disabled until expiry, and until this Redpocket has loaded from the chain.</p>
               <button
                 className={styles.btnGhost}
                 style={{ marginTop: 8 }}
                 type="button"
-                disabled={Date.now() / 1000 < p.expiry || !onchainToken[p.dropId]}
+                disabled={refundBusy !== null || Date.now() / 1000 < p.expiry || !onchainToken[p.dropId] || leftover === 0n}
                 onClick={() => refund(p)}
               >
-                {Date.now() / 1000 < p.expiry
+                {refundBusy === p.dropId
+                  ? busyCtaLabel(result, "Refund unclaimed funds")
+                  : Date.now() / 1000 < p.expiry
                   ? `Not expired yet (${fmtExpiry(p.expiry)})`
-                  : !onchainToken[p.dropId]
+                  : leftover === 0n
+                    ? "Nothing left to refund"
+                    : !onchainToken[p.dropId]
                     ? onchainFail[p.dropId]
                       ? "Could not read on-chain token"
                       : "Loading on-chain token…"
-                    : "Refund leftovers after expiry"}
+                    : "Refund unclaimed funds"}
               </button>
             </div>
           );

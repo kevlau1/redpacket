@@ -5,7 +5,16 @@ import type { WALLET_API } from "@starknet-io/types-js";
 import { num } from "starknet";
 import styles from "../app.module.css";
 import { Strk20Networks } from "@/lib/constants";
-import { errorResult, readBalances, readTokenBalance, submitStrk20, type ActionResult } from "@/lib/strk20";
+import {
+  errorResult,
+  pickTokenBalance,
+  applyBalanceDelta,
+  readBalances,
+  submitStrk20,
+  busyCtaLabel,
+  type ActionResult,
+  type ShieldedBalance,
+} from "@/lib/strk20";
 import { fmtAmount, labelAmount, parseAmount, resolveToken, tokensForNetwork } from "@/lib/tokens";
 import { useStoreWallet } from "./Wallet/walletContext";
 import { useFrontendProvider } from "./client/provider/providerContext";
@@ -22,9 +31,10 @@ export default function ShieldStrip() {
   const [customAddr, setCustomAddr] = useState("");
   const [customDecimals, setCustomDecimals] = useState<number | null>(null);
   const [amountStr, setAmountStr] = useState(known[0]?.shieldDefault ?? "1");
-  const [bal, setBal] = useState<bigint | null>(null);
-  const [held, setHeld] = useState<{ token: string; amount: bigint }[]>([]);
+  const [all, setAll] = useState<ShieldedBalance[] | null>(null);
+  const [unregistered, setUnregistered] = useState(false);
   const [result, setResult] = useState<ActionResult | null>(null);
+  const [busy, setBusy] = useState(false);
   const okNet = Strk20Networks[index] !== undefined;
 
   const token = useMemo(
@@ -43,20 +53,56 @@ export default function ShieldStrip() {
     }
   }, [index, tokenId]);
 
-  async function refresh() {
-    if (!account) return;
-    const all = await readBalances(account);
-    setHeld(all.filter((b) => b.amount > 0n));
-    if (token) {
-      setBal(await readTokenBalance(account, token.address));
-    } else {
-      setBal(null);
+  async function refresh(force = false) {
+    if (!account) {
+      setAll(null);
+      setUnregistered(false);
+      return;
+    }
+    const snap = await readBalances(account, force ? { force: true } : undefined);
+    setAll(snap.rows);
+    setUnregistered(snap.unregistered);
+  }
+
+  async function refreshUntil(tokenAddr: string, minAmount: bigint) {
+    const waits = [0, 1200, 2000, 3000, 4000, 5000];
+    for (let i = 0; i < waits.length; i++) {
+      if (waits[i]) await new Promise((r) => setTimeout(r, waits[i]));
+      if (!account) return;
+      const snap = await readBalances(account, { force: true });
+      const have = pickTokenBalance(snap.rows, tokenAddr);
+      if (!snap.unregistered && have >= minAmount) {
+        setAll(snap.rows);
+        setUnregistered(false);
+        return;
+      }
+      if (i === waits.length - 1) {
+        setUnregistered(snap.unregistered);
+        if (!snap.unregistered) setAll(snap.rows);
+      }
     }
   }
 
   useEffect(() => {
-    refresh();
-  }, [account, connected, token?.address]);
+    if (!account) {
+      setAll(null);
+      setUnregistered(false);
+      return;
+    }
+    let cancelled = false;
+    readBalances(account).then((snap) => {
+      if (!cancelled) {
+        setAll(snap.rows);
+        setUnregistered(snap.unregistered);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [account]);
+
+  const held = useMemo(() => (all ?? []).filter((b) => b.amount > 0n), [all]);
+  const bal = token && all ? pickTokenBalance(all, token.address) : null;
 
   function pickToken(id: string) {
     setTokenId(id);
@@ -84,15 +130,29 @@ export default function ShieldStrip() {
       num.toBigInt(token.address);
       amount = parseAmount(amountStr, token.decimals);
       if (amount <= 0n) throw new Error("Amount must be greater than 0");
-    } catch (e: any) {
-      setResult(errorResult(e.message ?? "Invalid amount"));
+    } catch (e: unknown) {
+      setResult(errorResult(e));
       return;
     }
+    const before = token && all ? pickTokenBalance(all, token.address) : 0n;
     const actions: WALLET_API.STRK20_ACTION[] = [
       { type: "deposit", token: token.address, amount: num.toHex(amount) },
     ];
-    await submitStrk20(account, index, actions, labelAmount(amount, token), setResult);
-    await refresh();
+    setBusy(true);
+    try {
+      const tx = await submitStrk20(account, index, actions, labelAmount(amount, token), setResult);
+      if (tx?.confirmed) {
+        setUnregistered(false);
+        setAll((prev) => applyBalanceDelta(prev ?? [], token.address, amount));
+        void refreshUntil(token.address, before + amount);
+      } else if (tx) {
+        await refresh(true);
+      }
+    } catch (e: unknown) {
+      setResult(errorResult(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   const headline =
@@ -131,14 +191,20 @@ export default function ShieldStrip() {
             .join(" · ")}
         </p>
       ) : null}
-      <p className={styles.note}>
-        Sending deducts from shielded balance. Claims land there too. Shield public-wallet funds first. One address, one claim per Redpocket.
-      </p>
+      {unregistered ? (
+        <p className={styles.warn}>
+          This Ready account has not joined the STRK20 privacy pool on this network. Open Ready, stay on this network, tap STRK, tap Shield, and approve the privacy prompts. Then come back and shield here.
+        </p>
+      ) : (
+        <p className={styles.note}>
+          First time on this network: enable private tokens in Ready (STRK → Shield), then shield here. Sealing a Redpocket spends this balance. Claims arrive here too. One wallet, one claim per Redpocket.
+        </p>
+      )}
       <label className={styles.label}>Shield amount ({token?.symbol ?? "TOKEN"})</label>
-      <input className={styles.field} value={amountStr} onChange={(e) => setAmountStr(e.target.value)} />
+      <input className={styles.field} value={amountStr} onChange={(e) => setAmountStr(e.target.value)} disabled={busy} />
       {connected ? (
-        <button className={styles.btnCta} disabled={!okNet || (tokenId === "custom" && customDecimals === null)} onClick={shield}>
-          Shield into the privacy pool
+        <button className={styles.btnCta} disabled={busy || !okNet || (tokenId === "custom" && customDecimals === null)} onClick={shield}>
+          {busyCtaLabel(result, "Shield into the privacy pool")}
         </button>
       ) : (
         <SelectWallet variant="cta" />
