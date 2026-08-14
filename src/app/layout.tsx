@@ -18,20 +18,20 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Redpocket · Password Redpockets, stealth claims",
-  description: "Password Redpockets that claim into your STRK20 shielded balance",
+  title: "Redpacket · Password Redpackets, stealth claims",
+  description: "Password Redpackets that claim into your STRK20 shielded balance",
   openGraph: {
-    title: "🧧 Redpocket — claim into stealth",
+    title: "🧧 Redpacket — claim into stealth",
     description: "Set a password, share one link. Claims land in a STRK20 shielded balance.",
-    siteName: "Redpocket",
+    siteName: "Redpacket",
     type: "website",
-    images: [{ url: "/redpocket-hero.jpg", width: 1536, height: 1024 }],
+    images: [{ url: "/redpacket-hero.jpg", width: 1536, height: 1024 }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "🧧 Redpocket — claim into stealth",
-    description: "Password Redpockets that claim into your STRK20 shielded balance",
-    images: ["/redpocket-hero.jpg"],
+    title: "🧧 Redpacket — claim into stealth",
+    description: "Password Redpackets that claim into your STRK20 shielded balance",
+    images: ["/redpacket-hero.jpg"],
   },
 };
 

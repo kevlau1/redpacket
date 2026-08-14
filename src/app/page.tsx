@@ -15,7 +15,7 @@ export default function Page() {
             <img className={styles.heroLogo} src="/strk20-logo.svg" alt="STRK20" width={161} height={22} />
           </p>
           <h1 className={styles.heroTitle}>
-            Redpocket
+            Redpacket
             <em>Claim into stealth</em>
           </h1>
           <p className={styles.heroSub}>
@@ -24,7 +24,7 @@ export default function Page() {
         </div>
         <figure className={styles.heroVisual}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/redpocket-hero.jpg" alt="" width={1536} height={1024} />
+          <img src="/redpacket-hero.jpg" alt="" width={1536} height={1024} />
         </figure>
       </header>
 
@@ -40,15 +40,15 @@ export default function Page() {
         <div className={styles.choices}>
           <Link className={styles.choice} href="/create">
             <span className={styles.choiceKicker}>Send</span>
-            <h2>Seal a Redpocket</h2>
-            <p>After shielding, set the total, share count, and password. Send the claim link. Keep the Redpocket ID and refund secret yourself.</p>
-            <span className={styles.choiceGo}>Create Redpocket</span>
+            <h2>Seal a Redpacket</h2>
+            <p>After shielding, set the total, share count, and password. Send the claim link. Keep the Redpacket ID and refund secret yourself.</p>
+            <span className={styles.choiceGo}>Create Redpacket</span>
           </Link>
           <Link className={styles.choice} href="/claim">
             <span className={styles.choiceKicker}>Claim</span>
             <h2>Enter a password to claim</h2>
             <p>Enable private tokens in Ready on this network, then claim into your shielded balance. Each wallet can claim once.</p>
-            <span className={styles.choiceGo}>Claim Redpocket</span>
+            <span className={styles.choiceGo}>Claim Redpacket</span>
           </Link>
         </div>
       </section>

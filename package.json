@@ -1,9 +1,9 @@
 {
-  "name": "redpocket",
+  "name": "redpacket",
   "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
-  "description": "Password Redpockets and stealth claims on STRK20",
+  "description": "Password Redpackets and stealth claims on STRK20",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",

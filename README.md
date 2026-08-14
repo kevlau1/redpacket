@@ -1,4 +1,4 @@
-# Redpocket
+# Redpacket
 
 Live demo: [https://redpocket-virid.vercel.app/](https://redpocket-virid.vercel.app/) — Ready wallet, Starknet Mainnet.
 
@@ -16,7 +16,7 @@ This is the feature group chats never stop using. Someone drops 1,000 USDC. Ten 
 
 Claimers need Ready on this network, with private tokens enabled. STRK, USDC, strkBTC, ETH — anything the wallet can Shield.
 
-What stays quiet: who claimed, and the password. What does not: the total that left the pool. Redpocket is honest about that.
+What stays quiet: who claimed, and the password. What does not: the total that left the pool. Redpacket is honest about that.
 
 Built for the [STRK20 Private Sprint](https://strk20.starknet.io/hackathon): Wallet API + a stateful [`privacy_invoke`](https://strk20-by-example.org/helpers/privacy-invoke) helper. Kin to [IDEA-09](https://github.com/starkience/strk20-hackathon/blob/main/IDEAS.md) (pay by identifier / claim link) and the [escrow helper](https://strk20-by-example.org/helpers/escrow) pattern.
 
@@ -26,7 +26,7 @@ New Year in a 10-person Telegram. You shield 1,000 USDC and seal a packet with p
 
 Equal mode: ten claims, 100 USDC each, done in a minute. Lucky mode: you pick random, send **one** link, and let them fight. A friend on the train claims and hits a fat share. Someone else opens a thinner one. The same wallet cannot grab twice. Unclaimed funds, after expiry, refund to **your** shielded balance with the wallet that sealed the packet.
 
-That is why it spreads. People already know the ritual. Redpocket is that ritual, with the claim itself in stealth.
+That is why it spreads. People already know the ritual. Redpacket is that ritual, with the claim itself in stealth.
 
 ## STRK20 integration
 
@@ -57,7 +57,7 @@ npm run dev
 
 Ready wallet required. RPC uses `PROVIDER_URL` in `.env.local` (Alchemy key, never `NEXT_PUBLIC_`). If it is empty, the app falls back to Cartridge public RPC.
 
-The helper is already deployed. Users do not deploy it. Addresses live in `NEXT_PUBLIC_REDPOCKET_MAINNET` / `NEXT_PUBLIC_REDPOCKET_SEPOLIA` (defaults are the live contracts).
+The helper is already deployed. Users do not deploy it. Addresses live in `NEXT_PUBLIC_REDPACKET_MAINNET` / `NEXT_PUBLIC_REDPACKET_SEPOLIA` (defaults are the live contracts).
 
 Cairo:
 

@@ -178,7 +178,7 @@ export default function ShieldStrip() {
         </p>
       ) : (
         <p className={styles.note}>
-          First time on this network: enable private tokens in Ready (STRK → Shield), then shield here. Sealing a Redpocket spends this balance. Claims arrive here too. One wallet, one claim per Redpocket.
+          First time on this network: enable private tokens in Ready (STRK → Shield), then shield here. Sealing a Redpacket spends this balance. Claims arrive here too. One wallet, one claim per Redpacket.
         </p>
       )}
       <label className={styles.label}>Shield amount ({token?.symbol ?? "TOKEN"})</label>

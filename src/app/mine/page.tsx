@@ -98,9 +98,9 @@ export default function MinePage() {
 
   return (
     <Shell>
-      <h1 className={styles.h1}>Redpockets I sent</h1>
+      <h1 className={styles.h1}>Redpackets I sent</h1>
       <p className={styles.note}>
-        Password, Redpocket ID, and refund secret live in this browser. Download a backup before you switch devices. Refunds must use the same wallet that created the Redpocket. Expiry does not auto-refund.
+        Password, Redpacket ID, and refund secret live in this browser. Download a backup before you switch devices. Refunds must use the same wallet that created the Redpacket. Expiry does not auto-refund.
       </p>
       {result ? <Receipt r={result} /> : null}
       {packs.length === 0 ? (
@@ -146,7 +146,7 @@ export default function MinePage() {
                 })}
               />
               <CopyRow
-                label="Redpocket ID"
+                label="Redpacket ID"
                 value={p.dropId}
                 hint="Needed on the claim page if someone has the password but not the link."
                 wrap
@@ -155,7 +155,7 @@ export default function MinePage() {
               <CopyRow
                 label="Claim link"
                 value={url}
-                hint="Already includes the Redpocket ID and password. This is what you send."
+                hint="Already includes the Redpacket ID and password. This is what you send."
               />
               <CopyRow
                 label="Refund secret"
@@ -169,7 +169,7 @@ export default function MinePage() {
                   type="button"
                   onClick={() =>
                     downloadBackup(
-                      `redpocket-${p.dropId.slice(0, 10)}.txt`,
+                      `redpacket-${p.dropId.slice(0, 10)}.txt`,
                       backupPlaintext({
                         dropId: p.dropId,
                         password: p.password,
@@ -185,10 +185,10 @@ export default function MinePage() {
               </div>
               {wrongCreator ? (
                 <p className={styles.warn}>
-                  This wallet did not create this Redpocket. Refund must use the same wallet that sealed it.
+                  This wallet did not create this Redpacket. Refund must use the same wallet that sealed it.
                 </p>
               ) : null}
-              <p className={styles.hint}>Refund stays disabled until expiry, and until this Redpocket has loaded from the chain.</p>
+              <p className={styles.hint}>Refund stays disabled until expiry, and until this Redpacket has loaded from the chain.</p>
               <button
                 className={styles.btnGhost}
                 style={{ marginTop: 8 }}

@@ -73,7 +73,7 @@ function ClaimForm({ dropId }: { dropId: string }) {
       if (cancelled) return;
       if (!pack?.exists) {
         setExists(false);
-        setStatus("This Redpocket is not on-chain yet. Check the network, or wait for the create tx to confirm.");
+        setStatus("This Redpacket is not on-chain yet. Check the network, or wait for the create tx to confirm.");
         return;
       }
       setExists(true);
@@ -113,12 +113,12 @@ function ClaimForm({ dropId }: { dropId: string }) {
       return;
     }
     if (!tokenAddr) {
-      setResult(errorResult("Redpocket token not loaded yet"));
+      setResult(errorResult("Redpacket token not loaded yet"));
       return;
     }
     try {
       if (num.toBigInt(creatorHashOnchain) !== 0n && num.toBigInt(creatorHashOnchain) === num.toBigInt(creatorHash(address))) {
-        setResult(errorResult("This wallet sealed this Redpocket. Connect a different account to claim a share."));
+        setResult(errorResult("This wallet sealed this Redpacket. Connect a different account to claim a share."));
         return;
       }
     } catch {
@@ -138,19 +138,19 @@ function ClaimForm({ dropId }: { dropId: string }) {
       const provider = myFrontendProviders[index] as any;
       const live = await fetchPack(provider, index, dropId);
       if (!live?.exists || live.slotsLeft === 0) {
-        setResult(errorResult("No shares left on this Redpocket."));
+        setResult(errorResult("No shares left on this Redpacket."));
         return;
       }
       try {
         if (num.toBigInt(live.creatorHash) !== 0n && num.toBigInt(live.creatorHash) === num.toBigInt(creatorHash(address))) {
-          setResult(errorResult("This wallet sealed this Redpocket. Connect a different account to claim a share."));
+          setResult(errorResult("This wallet sealed this Redpacket. Connect a different account to claim a share."));
           return;
         }
       } catch {
         /* if the hash cannot be compared, let the chain decide */
       }
       if (!Number.isInteger(live.slots) || live.slots < 1 || live.slots > 50) {
-        setResult(errorResult("This Redpocket was created with an older app version. Seal a new one on the current network."));
+        setResult(errorResult("This Redpacket was created with an older app version. Seal a new one on the current network."));
         return;
       }
       const tickets = claimLeaves(preimage, live.slots);
@@ -165,7 +165,7 @@ function ClaimForm({ dropId }: { dropId: string }) {
         }
         const proof = merkleProof(committed, idx);
         if (proof.length !== expectedHeight || !merkleVerify(committed[idx], proof, live.merkleRoot)) {
-          setResult(errorResult("Wrong password, or this Redpocket is from an older app version."));
+          setResult(errorResult("Wrong password, or this Redpacket is from an older app version."));
           return;
         }
         const calldata = claimCalldata({
@@ -209,9 +209,9 @@ function ClaimForm({ dropId }: { dropId: string }) {
   return (
     <div className={styles.panel}>
       <CopyRow
-        label="Redpocket ID"
+        label="Redpacket ID"
         value={dropId}
-        hint="This identifies the Redpocket. The same password can be used on more than one, so the ID has to match."
+        hint="This identifies the Redpacket. The same password can be used on more than one, so the ID has to match."
         wrap
       />
       <label className={styles.label}>Password</label>
@@ -235,7 +235,7 @@ function ClaimForm({ dropId }: { dropId: string }) {
           <span>{slotsLeft ?? "…"} shares · expires {fmtExpiry(expiry)}</span>
         </div>
       ) : null}
-      {expired ? <p className={styles.warn}>Expired. Claims are closed. Unclaimed funds go back to the sender, using the same wallet that created this Redpocket.</p> : null}
+      {expired ? <p className={styles.warn}>Expired. Claims are closed. Unclaimed funds go back to the sender, using the same wallet that created this Redpacket.</p> : null}
       {empty && !justClaimed ? <p className={styles.warn}>All shares claimed.</p> : null}
       {justClaimed ? (
         <p className={styles.okNote}>
@@ -265,7 +265,7 @@ function ClaimInner() {
     <Shell>
       <h1 className={styles.h1}>Enter a password to claim</h1>
       <p className={styles.note}>
-        Each wallet can claim a given Redpocket once. Funds go to your shielded balance, not your public wallet. Enable private tokens in Ready on this network before you claim.
+        Each wallet can claim a given Redpacket once. Funds go to your shielded balance, not your public wallet. Enable private tokens in Ready on this network before you claim.
       </p>
       <ClaimForm dropId={dropId} />
     </Shell>

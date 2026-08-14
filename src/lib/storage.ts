@@ -13,13 +13,15 @@ export type StoredPack = {
   creator?: string;
 };
 
-const KEY = "redpocket.v2";
-const LEGACY_KEY = "sealpack.v2";
+const KEY = "redpacket.v2";
+const LEGACY_KEYS = ["redpocket.v2", "sealpack.v2"];
 
 function readAll(): StoredPack[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(KEY) ?? localStorage.getItem(LEGACY_KEY);
+    const raw =
+      localStorage.getItem(KEY) ??
+      LEGACY_KEYS.map((k) => localStorage.getItem(k)).find((v) => v != null);
     return raw ? (JSON.parse(raw) as StoredPack[]) : [];
   } catch {
     return [];
@@ -28,7 +30,7 @@ function readAll(): StoredPack[] {
 
 function writeAll(packs: StoredPack[]) {
   localStorage.setItem(KEY, JSON.stringify(packs));
-  localStorage.removeItem(LEGACY_KEY);
+  for (const k of LEGACY_KEYS) localStorage.removeItem(k);
 }
 
 export function savePack(pack: StoredPack) {
@@ -61,7 +63,7 @@ export function shareCopy(p: {
     .filter((x): x is string => Boolean(x))
     .join(" · ");
   return [
-    "🧧 Redpocket",
+    "🧧 Redpacket",
     "Claim into your STRK20 shielded balance.",
     detail ? detail : null,
     `Password: ${p.password}`,
@@ -82,15 +84,15 @@ export function backupPlaintext(p: {
   network?: string;
 }): string {
   return [
-    "Redpocket backup — keep this file private.",
+    "Redpacket backup — keep this file private.",
     p.network ? `Network: ${p.network}` : null,
     `Claim link: ${p.share}`,
-    `Redpocket ID: ${p.dropId}`,
+    `Redpacket ID: ${p.dropId}`,
     `Password: ${p.password}`,
     `Refund secret: ${p.refundSecret}`,
     "",
     "Send only the claim link.",
-    "Keep the refund secret. After expiry, refund with the same wallet that created the Redpocket.",
+    "Keep the refund secret. After expiry, refund with the same wallet that created the Redpacket.",
     "Another browser will not have this.",
   ]
     .filter((line): line is string => line !== null)

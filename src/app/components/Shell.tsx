@@ -18,7 +18,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             <Link href="/">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img className={styles.brandLogo} src="/strk20-logo.svg" alt="STRK20" width={147} height={20} />
-              <span className={styles.brandWord}>Redpocket</span>
+              <span className={styles.brandWord}>Redpacket</span>
             </Link>
             <span>{net}</span>
           </div>

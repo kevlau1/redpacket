@@ -17,11 +17,11 @@ export default function ClaimIndexPage() {
     const id = dropId.trim();
     const pw = password.trim();
     if (!id && !pw) {
-      setResult(errorResult("Enter a Redpocket ID and a password."));
+      setResult(errorResult("Enter a Redpacket ID and a password."));
       return;
     }
     if (!id) {
-      setResult(errorResult("Enter a Redpocket ID."));
+      setResult(errorResult("Enter a Redpacket ID."));
       return;
     }
     if (!pw) {
@@ -36,12 +36,12 @@ export default function ClaimIndexPage() {
     <Shell>
       <h1 className={styles.h1}>Enter a password to claim</h1>
       <p className={styles.note}>
-        If you have a claim link, open it directly. You only need a Redpocket ID here when someone told you the password without a link.
+        If you have a claim link, open it directly. You only need a Redpacket ID here when someone told you the password without a link.
       </p>
       <div className={styles.panel}>
-        <label className={styles.label}>Redpocket ID</label>
+        <label className={styles.label}>Redpacket ID</label>
         <p className={styles.hint}>
-          A long 0x… value. Passwords can repeat, so this ID is what selects the right Redpocket.
+          A long 0x… value. Passwords can repeat, so this ID is what selects the right Redpacket.
         </p>
         <input
           className={styles.field}
@@ -53,7 +53,7 @@ export default function ClaimIndexPage() {
           placeholder="0x…"
         />
         <label className={styles.label}>Password</label>
-        <p className={styles.hint}>Set by the sender. Each wallet can claim a given Redpocket once.</p>
+        <p className={styles.hint}>Set by the sender. Each wallet can claim a given Redpacket once.</p>
         <input
           className={styles.field}
           value={password}

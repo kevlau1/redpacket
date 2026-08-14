@@ -102,8 +102,8 @@ export function friendlyError(error: unknown): string {
   if (/at most \d+ decimal/i.test(s)) {
     return "Too many decimal places for this token.";
   }
-  if (/redpocket is not ready yet/i.test(s)) {
-    return "Redpocket is not deployed on this network yet. Switch Ready to Mainnet or Sepolia.";
+  if (/redp(?:ocket|acket) is not ready yet/i.test(s)) {
+    return "Redpacket is not deployed on this network yet. Switch Ready to Mainnet or Sepolia.";
   }
   if (/invalid.*bignumber|cannot convert.*bigint|invalid (hex|felt|address)/i.test(s)) {
     return "That contract address does not look valid. Check it and try again.";
@@ -121,37 +121,37 @@ export function friendlyError(error: unknown): string {
     return "This wallet does not support STRK20 private actions. Use Ready, and make sure it is up to date.";
   }
   if (/BAD_MERKLE_PROOF|BAD_PASSWORD/i.test(s)) {
-    return "Wrong password, or this Redpocket was created with an older app version. Check the password and network.";
+    return "Wrong password, or this Redpacket was created with an older app version. Check the password and network.";
   }
   if (/BAD_PROOF_LEN/i.test(s)) {
-    return "This Redpocket does not match this app version. Check the network, then try again.";
+    return "This Redpacket does not match this app version. Check the network, then try again.";
   }
   if (/LEAF_ALREADY_USED/i.test(s)) {
     return "That share was just claimed. Try again to take another remaining share.";
   }
   if (/ALREADY_CLAIMED/i.test(s)) {
-    return "This wallet already claimed this Redpocket. Use a different account.";
+    return "This wallet already claimed this Redpacket. Use a different account.";
   }
   if (/NO_SLOTS|NOTHING_TO_REFUND/i.test(s)) {
     return "Nothing left to claim or refund.";
   }
   if (/PACK_EXPIRED/i.test(s)) {
-    return "This Redpocket has expired. Claims are closed. The sender can refund leftover funds with the same wallet.";
+    return "This Redpacket has expired. Claims are closed. The sender can refund leftover funds with the same wallet.";
   }
   if (/NOT_EXPIRED/i.test(s)) {
     return "Too early to refund. Wait until the expiry date.";
   }
   if (/NOT_CREATOR/i.test(s)) {
-    return "Refund must use the same wallet that sealed this Redpocket.";
+    return "Refund must use the same wallet that sealed this Redpacket.";
   }
   if (/BAD_REFUND_SECRET/i.test(s)) {
-    return "Refund secret does not match. Use the backup from the device that created this Redpocket.";
+    return "Refund secret does not match. Use the backup from the device that created this Redpacket.";
   }
   if (/DROP_NOT_FOUND/i.test(s)) {
-    return "This Redpocket is not on this network. Switch Ready to the network it was created on.";
+    return "This Redpacket is not on this network. Switch Ready to the network it was created on.";
   }
   if (/DROP_EXISTS|DROP_ID_MISMATCH/i.test(s)) {
-    return "This Redpocket could not be created. Change the password or wait a moment and try again.";
+    return "This Redpacket could not be created. Change the password or wait a moment and try again.";
   }
   if (/INSUFFICIENT_DEPOSIT|INSUFFICIENT_REMAINING/i.test(s)) {
     return "The helper does not have enough tokens for this step. Shield first, then seal again.";
@@ -197,7 +197,7 @@ function signWaitCopy(actions: WALLET_API.STRK20_ACTION[]): { title: string; not
   const extra = kinds.has("deposit")
     ? "Approve the shield request in Ready. First time on this account, you may also need to enable private tokens."
     : kinds.has("withdraw")
-      ? "Approve every prompt — Ready proves the withdraw from shielded balance, then seals the Redpocket."
+      ? "Approve every prompt — Ready proves the withdraw from shielded balance, then seals the Redpacket."
       : kinds.has("invoke")
         ? "Approve every prompt — Ready may ask you to sign more than once."
         : "Approve the request in the Ready popup.";
@@ -492,7 +492,7 @@ export function isZeroAddress(addr: string): boolean {
 export function helperOrThrow(index: number): string {
   const h = helperForIndex(index);
   if (isZeroAddress(h)) {
-    throw new Error("Redpocket is not ready yet.");
+    throw new Error("Redpacket is not ready yet.");
   }
   return num.toHex(h);
 }

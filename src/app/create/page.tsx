@@ -202,7 +202,7 @@ export default function CreatePage() {
 
   return (
     <Shell>
-      <h1 className={styles.h1}>Seal a Redpocket</h1>
+      <h1 className={styles.h1}>Seal a Redpacket</h1>
       <p className={styles.note}>
         Shield on the home page first. Then seal from that shielded balance. Share only the claim link. Keep the refund secret — unclaimed funds come back only if you refund after expiry with the same wallet.
       </p>
@@ -268,7 +268,7 @@ export default function CreatePage() {
             <div className={styles.backup}>
               <div className={styles.backupTitle}>Back this up now. Another browser will not have it.</div>
               <p className={styles.warn}>
-                Redpocket ID is for people who only have the password. The refund secret is yours: after expiry, use the <strong>same wallet</strong> to return unclaimed funds to your shielded balance. Download or copy a backup before you close this tab.
+                Redpacket ID is for people who only have the password. The refund secret is yours: after expiry, use the <strong>same wallet</strong> to return unclaimed funds to your shielded balance. Download or copy a backup before you close this tab.
               </p>
               {created.share.includes("localhost") ? (
                 <p className={styles.warn}>
@@ -278,9 +278,9 @@ export default function CreatePage() {
               <CopyRow
                 label="Claim link"
                 value={created.share}
-                hint="This is enough to send. It already includes the Redpocket ID and password."
+                hint="This is enough to send. It already includes the Redpacket ID and password."
               />
-              <CopyRow label="Redpocket ID" value={created.dropId} hint="Needed on the claim page if someone has the password but not the link." wrap />
+              <CopyRow label="Redpacket ID" value={created.dropId} hint="Needed on the claim page if someone has the password but not the link." wrap />
               <CopyRow label="Password" value={created.password} />
               <CopyRow
                 label="Refund secret"
@@ -310,7 +310,7 @@ export default function CreatePage() {
                   type="button"
                   onClick={() =>
                     downloadBackup(
-                      `redpocket-${created.dropId.slice(0, 10)}.txt`,
+                      `redpacket-${created.dropId.slice(0, 10)}.txt`,
                       backupPlaintext({
                         dropId: created.dropId,
                         password: created.password,

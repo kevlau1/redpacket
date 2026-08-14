@@ -19,7 +19,7 @@ export default function ShareMessage({ text }: { text: string }) {
 
   async function share() {
     try {
-      await navigator.share({ title: "🧧 Redpocket", text });
+      await navigator.share({ title: "🧧 Redpacket", text });
     } catch (e: unknown) {
       const name = (e as { name?: string })?.name;
       if (name === "AbortError") return;
