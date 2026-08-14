@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+.DS_Store
+.env
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+cairo/target
+starter-kit-ref
+
+# Local-only helper deploy UI — do not publish
+src/app/deploy/
+DEV.md

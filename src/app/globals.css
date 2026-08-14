@@ -1,0 +1,60 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --ink: #eceef2;
+  --muted: #9aa3b0;
+  --bg: #0b0d10;
+  --card: #14181f;
+  --line: #2a3140;
+  --inset: #0f1218;
+  --accent: #c44536;
+  --accent-soft: #1f1414;
+  --accent-text: #e8a399;
+  --green: #4a9d78;
+  --green-soft: #12241c;
+  --danger: #d46a6e;
+  --warn: #c4a06a;
+  --r-card: 12px;
+  --r-control: 8px;
+  --r-pill: 999px;
+}
+
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  color: var(--ink);
+  background: var(--bg);
+  font-family: var(--font-body), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
+  font-feature-settings: "ss01" on, "cv11" on;
+}
+
+a { color: inherit; text-decoration: none; }
+
+button, input {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
