@@ -73,16 +73,14 @@ export default function SelectWallet({ variant = "nav" }: { variant?: "nav" | "c
     if (!isConnected || !StarknetWalletObject) return;
     const wallet = StarknetWalletObject;
     let cancelled = false;
-    let lastChain = "";
-    let lastIndex = -1;
+    let lastIndex = useFrontendProvider.getState().currentFrontendProviderIndex;
 
     async function syncFromWallet() {
       try {
         const chainId = String(await walletV6.requestChainId(wallet));
         if (cancelled) return;
         const idx = providerIndexForChain(chainId);
-        if (chainId === lastChain && idx === lastIndex) return;
-        lastChain = chainId;
+        if (idx === lastIndex) return;
         lastIndex = idx;
         setChain(chainId);
         setCurrentFrontendProviderIndex(idx);

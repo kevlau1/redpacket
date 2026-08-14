@@ -8,7 +8,6 @@ import { Strk20Networks } from "@/lib/constants";
 import {
   errorResult,
   pickTokenBalance,
-  applyBalanceDelta,
   readBalances,
   submitStrk20,
   busyCtaLabel,
@@ -25,6 +24,7 @@ import TokenPicker, { selectedToken } from "./TokenPicker";
 export default function ShieldStrip() {
   const account = useStoreWallet((s) => s.myWalletAccount);
   const connected = useStoreWallet((s) => s.isConnected);
+  const address = useStoreWallet((s) => s.address);
   const index = useFrontendProvider((s) => s.currentFrontendProviderIndex);
   const known = tokensForNetwork(index);
   const [tokenId, setTokenId] = useState(known[0]?.id ?? "strk");
@@ -64,33 +64,15 @@ export default function ShieldStrip() {
     setUnregistered(snap.unregistered);
   }
 
-  async function refreshUntil(tokenAddr: string, minAmount: bigint) {
-    const waits = [0, 1200, 2000, 3000, 4000, 5000];
-    for (let i = 0; i < waits.length; i++) {
-      if (waits[i]) await new Promise((r) => setTimeout(r, waits[i]));
-      if (!account) return;
-      const snap = await readBalances(account, { force: true });
-      const have = pickTokenBalance(snap.rows, tokenAddr);
-      if (!snap.unregistered && have >= minAmount) {
-        setAll(snap.rows);
-        setUnregistered(false);
-        return;
-      }
-      if (i === waits.length - 1) {
-        setUnregistered(snap.unregistered);
-        if (!snap.unregistered) setAll(snap.rows);
-      }
-    }
-  }
-
   useEffect(() => {
-    if (!account) {
+    if (!account || !address) {
       setAll(null);
       setUnregistered(false);
       return;
     }
+    const acc = account;
     let cancelled = false;
-    readBalances(account).then((snap) => {
+    readBalances(acc).then((snap) => {
       if (!cancelled) {
         setAll(snap.rows);
         setUnregistered(snap.unregistered);
@@ -99,7 +81,7 @@ export default function ShieldStrip() {
     return () => {
       cancelled = true;
     };
-  }, [account]);
+  }, [account, address]);
 
   const held = useMemo(() => (all ?? []).filter((b) => b.amount > 0n), [all]);
   const bal = token && all ? pickTokenBalance(all, token.address) : null;
@@ -134,7 +116,6 @@ export default function ShieldStrip() {
       setResult(errorResult(e));
       return;
     }
-    const before = token && all ? pickTokenBalance(all, token.address) : 0n;
     const actions: WALLET_API.STRK20_ACTION[] = [
       { type: "deposit", token: token.address, amount: num.toHex(amount) },
     ];
@@ -143,8 +124,8 @@ export default function ShieldStrip() {
       const tx = await submitStrk20(account, index, actions, labelAmount(amount, token), setResult);
       if (tx?.confirmed) {
         setUnregistered(false);
-        setAll((prev) => applyBalanceDelta(prev ?? [], token.address, amount));
-        void refreshUntil(token.address, before + amount);
+        await new Promise((r) => setTimeout(r, 1500));
+        await refresh(true);
       } else if (tx) {
         await refresh(true);
       }

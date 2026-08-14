@@ -409,25 +409,6 @@ export function pickTokenBalance(all: ShieldedBalance[], token: string): bigint 
   return hit ? hit.amount : 0n;
 }
 
-export function applyBalanceDelta(rows: ShieldedBalance[], token: string, delta: bigint): ShieldedBalance[] {
-  const target = num.toBigInt(token);
-  let found = false;
-  const next = rows.map((b) => {
-    try {
-      if (num.toBigInt(b.token) === target) {
-        found = true;
-        const amount = b.amount + delta;
-        return { ...b, amount: amount < 0n ? 0n : amount };
-      }
-    } catch {
-      /* skip */
-    }
-    return b;
-  });
-  if (!found && delta > 0n) next.push({ token: num.toHex(target), amount: delta });
-  return next;
-}
-
 export async function readTokenBalance(
   account: WalletAccountV6,
   token: string,
