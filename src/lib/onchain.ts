@@ -1,7 +1,9 @@
-import { num, type RpcProvider } from "starknet";
+import { hash, num, type RpcProvider } from "starknet";
 import { helperForIndex } from "./constants";
 import { claimedTicket, leafUsedTicket } from "./crypto";
 import { isZeroAddress } from "./strk20";
+
+type ChainEvent = { from_address: string; keys: string[]; data: string[] };
 
 export type OnchainPack = {
   merkleRoot: string;
@@ -102,16 +104,66 @@ export async function fetchClaimed(
   return fetchTicket(provider, providerIndex, claimedTicket(dropId, account));
 }
 
-export async function unusedShareIndex(
+export type ShareLookup =
+  | { kind: "ok"; index: number }
+  | { kind: "all-used" }
+  | { kind: "unreadable" };
+
+function shuffledIndices(n: number): number[] {
+  const out = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/**
+ * Probes tickets in random order and stops at the first one the chain reports
+ * unused, so a fresh pack costs one call instead of one per share. A read that
+ * fails is never treated as unused — that would send a transaction doomed to
+ * revert with LEAF_ALREADY_USED.
+ */
+export async function findUnusedShare(
   provider: RpcProvider,
   providerIndex: number,
   dropId: string,
-  leaves: string[],
-): Promise<number | null> {
-  const flags = await Promise.all(
-    leaves.map((leaf) => fetchTicket(provider, providerIndex, leafUsedTicket(dropId, leaf))),
-  );
-  const unused = leaves.map((_, i) => i).filter((i) => flags[i] !== true);
-  if (unused.length === 0) return null;
-  return unused[Math.floor(Math.random() * unused.length)];
+  tickets: string[],
+): Promise<ShareLookup> {
+  let unreadable = false;
+  for (const i of shuffledIndices(tickets.length)) {
+    const used = await fetchTicket(provider, providerIndex, leafUsedTicket(dropId, tickets[i]));
+    if (used === false) return { kind: "ok", index: i };
+    if (used === null) unreadable = true;
+  }
+  return unreadable ? { kind: "unreadable" } : { kind: "all-used" };
+}
+
+/** Exact payout for a confirmed claim, read from the helper's `Claimed` event. */
+export async function fetchClaimedAmount(
+  provider: RpcProvider,
+  providerIndex: number,
+  txHash: string,
+  dropId: string,
+): Promise<bigint | null> {
+  const helper = helperForIndex(providerIndex);
+  if (isZeroAddress(helper)) return null;
+  try {
+    const receipt = (await provider.getTransactionReceipt(txHash)) as unknown as {
+      value?: { events?: ChainEvent[] };
+      events?: ChainEvent[];
+    };
+    const events = receipt.value?.events ?? receipt.events ?? [];
+    const selector = num.toBigInt(hash.getSelectorFromName("Claimed"));
+    const target = num.toBigInt(dropId);
+    for (const e of events) {
+      if (num.toBigInt(e.from_address) !== num.toBigInt(helper)) continue;
+      if (num.toBigInt(e.keys?.[0] ?? 0) !== selector) continue;
+      if (num.toBigInt(e.keys?.[1] ?? 0) !== target) continue;
+      return num.toBigInt(e.data[0]);
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

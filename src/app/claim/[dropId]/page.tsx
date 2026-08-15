@@ -14,7 +14,7 @@ import { useFrontendProvider } from "../../components/client/provider/providerCo
 import { myFrontendProviders } from "@/lib/constants";
 import { claimLeaves, committedLeaves, creatorHash, passwordPreimage } from "@/lib/crypto";
 import { merkleHeight, merkleProof, merkleVerify } from "@/lib/merkle";
-import { fetchClaimed, fetchPack, fetchTokenDecimals, unusedShareIndex } from "@/lib/onchain";
+import { fetchClaimed, fetchClaimedAmount, fetchPack, fetchTokenDecimals, findUnusedShare } from "@/lib/onchain";
 import { passwordFromHash } from "@/lib/storage";
 import {
   claimCalldata,
@@ -158,11 +158,20 @@ function ClaimForm({ dropId }: { dropId: string }) {
       const expectedHeight = merkleHeight(live.slots);
       let tx: Awaited<ReturnType<typeof submitStrk20>>;
       for (let attempt = 0; attempt < 4; attempt++) {
-        const idx = await unusedShareIndex(provider, index, dropId, tickets);
-        if (idx === null) {
+        const share = await findUnusedShare(provider, index, dropId, tickets);
+        if (share.kind === "all-used") {
           setResult(errorResult("All shares have already been claimed."));
           return;
         }
+        if (share.kind === "unreadable") {
+          setResult(
+            errorResult(
+              "Could not read which shares are still open. Wait a few seconds and try again — sending now would waste a fee.",
+            ),
+          );
+          return;
+        }
+        const idx = share.index;
         const proof = merkleProof(committed, idx);
         if (proof.length !== expectedHeight || !merkleVerify(committed[idx], proof, live.merkleRoot)) {
           setResult(errorResult("Wrong password, or this Redpacket is from an older app version."));
@@ -183,14 +192,11 @@ function ClaimForm({ dropId }: { dropId: string }) {
         if (!/LEAF_ALREADY_USED/i.test(tx.revertReason ?? "")) return;
       }
       if (!tx?.confirmed) return;
-      const before = remaining;
       setClaimed(true);
       setJustClaimed(true);
+      setPayout(await fetchClaimedAmount(provider, index, tx.hash, dropId));
       const pack = await fetchPack(provider, index, dropId);
       if (pack?.exists) {
-        if (before !== null && pack.remaining <= before) {
-          setPayout(before - pack.remaining);
-        }
         setRemaining(pack.remaining);
         setSlotsLeft(pack.slotsLeft);
         setStatus("Claim landed in your shielded balance.");

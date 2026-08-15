@@ -26,6 +26,9 @@ import {
 } from "@/lib/strk20";
 import { labelAmount, parseAmount, tokensForNetwork } from "@/lib/tokens";
 
+/** Refund is the only way back, and it needs expiry to pass. A typo here would park funds for years. */
+const MAX_DAYS = 30;
+
 export default function CreatePage() {
   const account = useStoreWallet((s) => s.myWalletAccount);
   const connected = useStoreWallet((s) => s.isConnected);
@@ -110,8 +113,8 @@ export default function CreatePage() {
       return;
     }
     const dayN = Number(days);
-    if (!Number.isFinite(dayN) || dayN < 1) {
-      setResult(errorResult("Expiry must be at least 1 day"));
+    if (!Number.isFinite(dayN) || dayN < 1 || dayN > MAX_DAYS) {
+      setResult(errorResult(`Expiry must be between 1 and ${MAX_DAYS} days`));
       return;
     }
 
@@ -229,7 +232,7 @@ export default function CreatePage() {
           </div>
           <div>
             <label className={styles.label}>Expiry (days)</label>
-            <p className={styles.hint}>It does not auto-refund. Use the same wallet to refund after expiry.</p>
+            <p className={styles.hint}>1–{MAX_DAYS}. It does not auto-refund. Use the same wallet to refund after expiry.</p>
             <input className={styles.field} value={days} onChange={(e) => setDays(e.target.value)} disabled={busy} />
           </div>
         </div>
@@ -243,7 +246,7 @@ export default function CreatePage() {
           </button>
         </div>
         <div className={styles.segCaptions}>
-          <p>Same amount each claim</p>
+          <p>Same amount each claim. Last claim takes any remainder</p>
           <p>Different amounts. Last claim takes the rest</p>
         </div>
         {connected ? (

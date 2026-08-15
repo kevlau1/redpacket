@@ -61,7 +61,7 @@ Create stores a Merkle root of **committed** tickets `L_i = poseidon(SEALPACK_CO
 - **One claim per address is a speed bump, not Sybil resistance.** Anyone holding the password can take every share from fresh wallets. Treat the password like cash.
 - **Lucky amounts are drawn on-chain** from the pack state and capped at twice the current average. A determined claimer can simulate the draw before signing, so lucky mode is a game, not a guaranteed lottery.
 - **Equal mode floors.** If the total does not divide evenly, the last claim takes the remainder.
-- **Nothing auto-refunds.** After expiry the creator returns leftovers using the same wallet plus the refund secret from the create screen. Back it up; it lives in that browser only.
+- **Nothing auto-refunds.** After expiry the creator returns leftovers using the same wallet plus the refund secret from the create screen. Back it up; it lives in that browser only. Expiry is capped at 30 days, because refund is the only way back and a typo would park the money for years.
 - **Claimers need Ready** on the same network, with private tokens enabled. STRK, USDC, strkBTC, ETH — anything the wallet can Shield.
 
 ## Stack
