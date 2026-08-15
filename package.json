@@ -8,7 +8,7 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "test:crypto": "npx tsx src/lib/crypto.check.ts"
   },
   "dependencies": {

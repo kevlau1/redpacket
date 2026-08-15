@@ -17,12 +17,23 @@ const ALLOWED = new Set([
   "starknet_getTransactionStatus",
 ]);
 
+const MAX_TRACKED_IPS = 5_000;
+
 const hits = new Map<string, { n: number; t: number }>();
 
+/**
+ * A client can send its own `x-forwarded-for`, and the platform appends the real
+ * address rather than replacing the header — so trust the platform's own header
+ * first, then the last hop, never the first.
+ */
 function clientIp(req: NextRequest): string {
+  const vercel = req.headers.get("x-vercel-forwarded-for");
+  if (vercel) return vercel.split(",").pop()?.trim() || "unknown";
+  const real = req.headers.get("x-real-ip");
+  if (real) return real.trim();
   const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]?.trim() || "unknown";
-  return req.headers.get("x-real-ip") || "unknown";
+  if (fwd) return fwd.split(",").pop()?.trim() || "unknown";
+  return "unknown";
 }
 
 function requestHost(req: NextRequest): string {
@@ -49,10 +60,20 @@ function sameSite(req: NextRequest): boolean {
   return false;
 }
 
+function sweep(now: number) {
+  for (const [key, seen] of hits) {
+    if (now - seen.t > WINDOW_MS) hits.delete(key);
+  }
+}
+
 function rateLimited(ip: string): boolean {
   const now = Date.now();
   const cur = hits.get(ip);
   if (!cur || now - cur.t > WINDOW_MS) {
+    if (hits.size >= MAX_TRACKED_IPS) {
+      sweep(now);
+      if (hits.size >= MAX_TRACKED_IPS) return true;
+    }
     hits.set(ip, { n: 1, t: now });
     return false;
   }
@@ -124,10 +145,12 @@ export async function POST(
     return Response.json({ error: "RPC method not allowed" }, { status: 403 });
   }
 
+  // Forward the parsed payload, not the raw text: duplicate JSON keys must not let
+  // upstream see a different method than the one validated here.
   const r = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body,
+    body: JSON.stringify(payload),
   });
   const text = await r.text();
   return new Response(text, {

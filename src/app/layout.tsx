@@ -17,7 +17,11 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
+/** Claim links get pasted into chats, so the card image must resolve to an absolute URL. */
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://redpocket-virid.vercel.app";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Redpacket · Password Redpackets, stealth claims",
   description: "Password Redpackets that claim into your STRK20 shielded balance",
   openGraph: {
