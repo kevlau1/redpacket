@@ -36,7 +36,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className={styles.footerLogo} src="/strk20-logo.svg" alt="STRK20" width={147} height={20} />
           <span>Private Sprint</span>
-          <a href="https://github.com/kevlau1/redpocket" target="_blank" rel="noreferrer">
+          <a href="https://github.com/kevlau1/redpacket" target="_blank" rel="noreferrer">
             GitHub
           </a>
           <a href="https://strk20-by-example.org/helpers/privacy-invoke" target="_blank" rel="noreferrer">
