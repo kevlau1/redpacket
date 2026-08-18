@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Analytics from "./components/Analytics";
+import VercelTelemetry from "./components/VercelTelemetry";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-body", display: "swap" });
 const geistMono = Geist_Mono({
@@ -48,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${geist.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body>
         {children}
-        <Analytics />
+        <VercelTelemetry />
       </body>
     </html>
   );
