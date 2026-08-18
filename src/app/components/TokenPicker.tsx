@@ -65,7 +65,9 @@ export default function TokenPicker({
     let cancelled = false;
     setCustomStatus("loading");
     onCustomDecimals(null);
-    (async () => {
+    // Every prefix of a pasted address parses as a felt, so reading decimals per
+    // keystroke would spend ~60 calls of the RPC budget on one address.
+    const timer = window.setTimeout(async () => {
       try {
         num.toBigInt(addr);
       } catch {
@@ -84,9 +86,10 @@ export default function TokenPicker({
       }
       onCustomDecimals(d);
       setCustomStatus("ok");
-    })();
+    }, 400);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [selectedId, customAddress, index, onCustomDecimals]);
 

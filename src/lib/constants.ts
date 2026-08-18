@@ -21,13 +21,15 @@ function rpcUrl(network: "mainnet" | "sepolia"): string {
   return alchemyUrl(network);
 }
 
-export const myFrontendProviders: ProviderInterface[] = [
-  new RpcProvider({ nodeUrl: rpcUrl("mainnet") }),
-  new RpcProvider({
-    nodeUrl: "https://starknet-testnet.public.blastapi.io/rpc/v0_7",
-  }),
-  new RpcProvider({ nodeUrl: rpcUrl("sepolia") }),
-];
+/**
+ * Keyed, not a dense array: wallet chain ids resolve to 0 (Mainnet) or 2
+ * (Sepolia), and every network table below is keyed the same way. Both entries
+ * go through the same-origin proxy, which `connect-src 'self'` requires.
+ */
+export const myFrontendProviders: Record<number, ProviderInterface> = {
+  0: new RpcProvider({ nodeUrl: rpcUrl("mainnet") }),
+  2: new RpcProvider({ nodeUrl: rpcUrl("sepolia") }),
+};
 
 export const Strk20Networks: Record<number, string> = {
   0: "MAINNET",

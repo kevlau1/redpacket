@@ -69,13 +69,18 @@ function ClaimForm({ dropId }: { dropId: string }) {
         return;
       }
       const provider = myFrontendProviders[index] as any;
-      const pack = await fetchPack(provider, index, dropId);
+      const read = await fetchPack(provider, index, dropId);
       if (cancelled) return;
-      if (!pack?.exists) {
+      if (read.kind !== "ok") {
         setExists(false);
-        setStatus("This Redpacket is not on-chain yet. Check the network, or wait for the create tx to confirm.");
+        setStatus(
+          read.kind === "unreadable"
+            ? "Could not reach the network to read this Redpacket. Wait a few seconds, then reload."
+            : "This Redpacket is not on this network yet. Check the network in Ready, or wait for the create tx to confirm.",
+        );
         return;
       }
+      const pack = read.pack;
       setExists(true);
       setRemaining(pack.remaining);
       setSlotsLeft(pack.slotsLeft);
@@ -136,8 +141,21 @@ function ClaimForm({ dropId }: { dropId: string }) {
     setBusy(true);
     try {
       const provider = myFrontendProviders[index] as any;
-      const live = await fetchPack(provider, index, dropId);
-      if (!live?.exists || live.slotsLeft === 0) {
+      const read = await fetchPack(provider, index, dropId);
+      if (read.kind === "unreadable") {
+        setResult(
+          errorResult(
+            "Could not read this Redpacket right now. Wait a few seconds and try again — sending now would waste a fee.",
+          ),
+        );
+        return;
+      }
+      if (read.kind === "missing") {
+        setResult(errorResult("This Redpacket is not on this network. Check the network in Ready."));
+        return;
+      }
+      const live = read.pack;
+      if (live.slotsLeft === 0) {
         setResult(errorResult("No shares left on this Redpacket."));
         return;
       }
@@ -195,10 +213,10 @@ function ClaimForm({ dropId }: { dropId: string }) {
       setClaimed(true);
       setJustClaimed(true);
       setPayout(await fetchClaimedAmount(provider, index, tx.hash, dropId));
-      const pack = await fetchPack(provider, index, dropId);
-      if (pack?.exists) {
-        setRemaining(pack.remaining);
-        setSlotsLeft(pack.slotsLeft);
+      const after = await fetchPack(provider, index, dropId);
+      if (after.kind === "ok") {
+        setRemaining(after.pack.remaining);
+        setSlotsLeft(after.pack.slotsLeft);
         setStatus("Claim landed in your shielded balance.");
       }
     } catch (e: unknown) {

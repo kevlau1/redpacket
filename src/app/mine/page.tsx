@@ -12,7 +12,7 @@ import { myFrontendProviders } from "@/lib/constants";
 import CopyRow from "../components/CopyRow";
 import ShareMessage from "../components/ShareMessage";
 import { fmtExpiry } from "@/lib/format";
-import { fetchPack } from "@/lib/onchain";
+import { fetchPack, type PackRead } from "@/lib/onchain";
 import { claimUrl, listPacks, backupPlaintext, downloadBackup, shareCopy, type StoredPack } from "@/lib/storage";
 import {
   errorResult,
@@ -24,6 +24,16 @@ import {
 } from "@/lib/strk20";
 import { labelAmount, resolveToken } from "@/lib/tokens";
 
+/** The helper checks `creator_hash`, so refunding from another wallet only buys a revert. */
+function sealedByAnotherWallet(p: StoredPack, address: string | undefined): boolean {
+  if (!p.creator || !address) return false;
+  try {
+    return num.toBigInt(p.creator) !== num.toBigInt(address);
+  } catch {
+    return true;
+  }
+}
+
 export default function MinePage() {
   const [packs, setPacks] = useState<StoredPack[]>([]);
   const [origin, setOrigin] = useState("");
@@ -33,7 +43,7 @@ export default function MinePage() {
   const [result, setResult] = useState<ActionResult | null>(null);
   const [remaining, setRemaining] = useState<Record<string, string>>({});
   const [onchainToken, setOnchainToken] = useState<Record<string, string>>({});
-  const [onchainFail, setOnchainFail] = useState<Record<string, boolean>>({});
+  const [readState, setReadState] = useState<Record<string, PackRead["kind"]>>({});
   const [refundBusy, setRefundBusy] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,25 +52,37 @@ export default function MinePage() {
   }, []);
 
   useEffect(() => {
+    if (packs.length === 0) return;
     const provider = myFrontendProviders[index] as any;
-    packs.forEach(async (p) => {
-      const on = await fetchPack(provider, index, p.dropId);
-      if (on?.exists) {
-        setRemaining((m) => ({
-          ...m,
-          [p.dropId]: `${on.remaining.toString()}|${on.slotsLeft}`,
-        }));
-        setOnchainToken((m) => ({ ...m, [p.dropId]: on.token }));
-        setOnchainFail((m) => ({ ...m, [p.dropId]: false }));
-      } else {
-        setOnchainFail((m) => ({ ...m, [p.dropId]: true }));
+    let cancelled = false;
+    // One at a time: firing a read per stored pack at once trips this app's own
+    // RPC rate limit for anyone who has sent more than a handful.
+    (async () => {
+      for (const p of packs) {
+        const read = await fetchPack(provider, index, p.dropId);
+        if (cancelled) return;
+        setReadState((m) => ({ ...m, [p.dropId]: read.kind }));
+        if (read.kind === "ok") {
+          setRemaining((m) => ({
+            ...m,
+            [p.dropId]: `${read.pack.remaining.toString()}|${read.pack.slotsLeft}`,
+          }));
+          setOnchainToken((m) => ({ ...m, [p.dropId]: read.pack.token }));
+        }
       }
-    });
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [packs, index]);
 
   async function refund(p: StoredPack) {
     if (!account || !address) {
       setResult(errorResult("Connect a wallet first"));
+      return;
+    }
+    if (sealedByAnotherWallet(p, address)) {
+      setResult(errorResult("Refund must use the same wallet that sealed this Redpacket."));
       return;
     }
     setRefundBusy(p.dropId);
@@ -82,11 +104,11 @@ export default function MinePage() {
       ];
       const tx = await submitStrk20(account, index, actions, `unclaimed ${meta.symbol}`, setResult);
       if (!tx?.hash) return;
-      const on = await fetchPack(myFrontendProviders[index] as any, index, p.dropId);
-      if (on?.exists) {
+      const after = await fetchPack(myFrontendProviders[index] as any, index, p.dropId);
+      if (after.kind === "ok") {
         setRemaining((m) => ({
           ...m,
-          [p.dropId]: `${on.remaining.toString()}|${on.slotsLeft}`,
+          [p.dropId]: `${after.pack.remaining.toString()}|${after.pack.slotsLeft}`,
         }));
       }
     } catch (e: unknown) {
@@ -114,14 +136,9 @@ export default function MinePage() {
             decimals: p.decimals ?? resolveToken(onchainToken[p.dropId] ?? p.token, index).decimals,
           };
           const leftover = rem ? BigInt(rem) : null;
-          const wrongCreator = (() => {
-            if (!p.creator || !address) return false;
-            try {
-              return num.toBigInt(p.creator) !== num.toBigInt(address);
-            } catch {
-              return true;
-            }
-          })();
+          const wrongCreator = sealedByAnotherWallet(p, address);
+          const notExpired = Date.now() / 1000 < p.expiry;
+          const loaded = Boolean(onchainToken[p.dropId]);
           return (
             <div key={p.dropId} className={styles.panel}>
               <div className={styles.meta}>
@@ -193,19 +210,23 @@ export default function MinePage() {
                 className={styles.btnGhost}
                 style={{ marginTop: 8 }}
                 type="button"
-                disabled={refundBusy !== null || Date.now() / 1000 < p.expiry || !onchainToken[p.dropId] || leftover === 0n}
+                disabled={refundBusy !== null || notExpired || wrongCreator || !loaded || leftover === 0n}
                 onClick={() => refund(p)}
               >
                 {refundBusy === p.dropId
                   ? busyCtaLabel(result, "Refund unclaimed funds")
-                  : Date.now() / 1000 < p.expiry
+                  : notExpired
                   ? `Not expired yet (${fmtExpiry(p.expiry)})`
+                  : wrongCreator
+                  ? "Needs the wallet that sealed it"
                   : leftover === 0n
                     ? "Nothing left to refund"
-                    : !onchainToken[p.dropId]
-                    ? onchainFail[p.dropId]
+                    : !loaded
+                    ? readState[p.dropId] === "unreadable"
                       ? "Could not read on-chain token"
-                      : "Loading on-chain token…"
+                      : readState[p.dropId] === "missing"
+                        ? "Not found on this network"
+                        : "Loading on-chain token…"
                     : "Refund unclaimed funds"}
               </button>
             </div>

@@ -29,15 +29,22 @@ function prettyStatus(finality?: string, exec?: string): string {
   return [f, e].filter(Boolean).join(" · ") || "Confirmed";
 }
 
-export function flattenError(error: unknown): string {
+const MAX_ERROR_DEPTH = 6;
+
+/** Wallet and RPC errors nest, and a `cause` can point back at its own chain. */
+function flatten(error: unknown, depth: number, seen: Set<object>): string {
   if (error == null) return "";
   if (typeof error === "string") return error;
+  if (typeof error === "object") {
+    if (depth >= MAX_ERROR_DEPTH || seen.has(error)) return "";
+    seen.add(error);
+  }
   if (error instanceof Error) {
     const coded = error as Error & { code?: unknown; error?: unknown; data?: unknown };
     if (coded.code === 4001 || coded.code === "4001" || coded.code === "ACTION_REJECTED") {
       return "user rejected the request";
     }
-    const extra = flattenError(coded.error ?? coded.data);
+    const extra = flatten(coded.error ?? coded.data, depth + 1, seen);
     return [error.message, extra].filter(Boolean).join("\n");
   }
   if (typeof error === "object") {
@@ -45,7 +52,9 @@ export function flattenError(error: unknown): string {
     if (o.code === 4001 || o.code === "4001" || o.code === "ACTION_REJECTED") {
       return "user rejected the request";
     }
-    const bits = [o.message, o.error, o.data, o.cause, o.revert_error, o.revert_reason].map(flattenError).filter(Boolean);
+    const bits = [o.message, o.error, o.data, o.cause, o.revert_error, o.revert_reason]
+      .map((v) => flatten(v, depth + 1, seen))
+      .filter(Boolean);
     if (bits.length) return [...new Set(bits)].join("\n");
     try {
       return JSON.stringify(error);
@@ -54,6 +63,10 @@ export function flattenError(error: unknown): string {
     }
   }
   return String(error);
+}
+
+export function flattenError(error: unknown): string {
+  return flatten(error, 0, new Set());
 }
 
 export function errorResult(error: unknown): ActionResult {
@@ -217,11 +230,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Backs off so a 12-minute wait costs tens of reads, not one every 2.5s. */
+function nextPollDelay(current: number): number {
+  return Math.min(Math.round(current * 1.5), 10_000);
+}
+
 async function waitUntilAccepted(
   provider: { getTransactionStatus?: (h: string) => Promise<any>; getTransactionReceipt?: (h: string) => Promise<any> },
   txH: string,
 ): Promise<{ finality?: string; exec?: string; feeRaw?: unknown; revertReason?: string }> {
   const deadline = Date.now() + 12 * 60 * 1000;
+  let delay = 2_000;
   while (Date.now() < deadline) {
     try {
       const st = await provider.getTransactionStatus?.(txH);
@@ -255,7 +274,8 @@ async function waitUntilAccepted(
     } catch {
       /* keep polling — proxy/RPC can 403 or lag right after broadcast */
     }
-    await sleep(2500);
+    await sleep(delay);
+    delay = nextPollDelay(delay);
   }
   throw new Error("Timed out waiting for the transaction to land on L2");
 }

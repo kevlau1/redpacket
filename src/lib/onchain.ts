@@ -15,8 +15,17 @@ export type OnchainPack = {
   refundHash: string;
   random: boolean;
   creatorHash: string;
-  exists: boolean;
 };
+
+/**
+ * `get_pack` reads a map, so an unknown drop comes back zeroed instead of
+ * reverting. That makes "no such pack" and "could not reach the chain" two
+ * different answers, and the UI must not report the second as the first.
+ */
+export type PackRead =
+  | { kind: "ok"; pack: OnchainPack }
+  | { kind: "missing" }
+  | { kind: "unreadable" };
 
 function resultArray(res: unknown): string[] {
   if (Array.isArray(res)) return res as string[];
@@ -27,32 +36,40 @@ export async function fetchPack(
   provider: RpcProvider,
   providerIndex: number,
   dropId: string,
-): Promise<OnchainPack | null> {
+): Promise<PackRead> {
   const helper = helperForIndex(providerIndex);
-  if (isZeroAddress(helper)) return null;
+  if (isZeroAddress(helper)) return { kind: "unreadable" };
+  let raw: string[];
   try {
     const res = await provider.callContract({
       contractAddress: helper,
       entrypoint: "get_pack",
       calldata: [num.toHex(dropId)],
     });
+    raw = resultArray(res);
+  } catch {
+    return { kind: "unreadable" };
+  }
+  try {
     const [merkleRoot, token, remaining, slots, slotsLeft, expiry, refundHash, random, creatorHash] =
-      resultArray(res);
-    const root = num.toBigInt(merkleRoot);
+      raw;
+    if (num.toBigInt(merkleRoot) === 0n) return { kind: "missing" };
     return {
-      merkleRoot: num.toHex(merkleRoot),
-      token: num.toHex(token),
-      remaining: num.toBigInt(remaining),
-      slots: Number(num.toBigInt(slots)),
-      slotsLeft: Number(num.toBigInt(slotsLeft)),
-      expiry: num.toBigInt(expiry),
-      refundHash: num.toHex(refundHash),
-      random: num.toBigInt(random) !== 0n,
-      creatorHash: creatorHash ? num.toHex(creatorHash) : "0x0",
-      exists: root !== 0n,
+      kind: "ok",
+      pack: {
+        merkleRoot: num.toHex(merkleRoot),
+        token: num.toHex(token),
+        remaining: num.toBigInt(remaining),
+        slots: Number(num.toBigInt(slots)),
+        slotsLeft: Number(num.toBigInt(slotsLeft)),
+        expiry: num.toBigInt(expiry),
+        refundHash: num.toHex(refundHash),
+        random: num.toBigInt(random) !== 0n,
+        creatorHash: creatorHash ? num.toHex(creatorHash) : "0x0",
+      },
     };
   } catch {
-    return null;
+    return { kind: "unreadable" };
   }
 }
 
