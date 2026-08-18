@@ -1,4 +1,8 @@
 [package]
+# Stays "redpocket" on purpose: the package name lands in the ABI's qualified type
+# names, which are hashed into the class hash. Renaming it would stop this source
+# from reproducing 0x48e9638adcdc804690cbe51d9dd1ba0b7ebf918fc1935feb1dd002fea612798,
+# the class deployed on Mainnet and Sepolia.
 name = "redpocket"
 version = "0.1.0"
 edition = "2024_07"
