@@ -12,8 +12,10 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
+              // Vercel Analytics serves its production script and beacon from the same
+              // origin; only the dev-only debug build comes from vercel-scripts.com.
               isDev
-                ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+                ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com"
                 : "script-src 'self' 'unsafe-inline'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https:",
