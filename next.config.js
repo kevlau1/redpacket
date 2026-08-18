@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
-const isDev = process.env.NODE_ENV === "development";
-
+// The Content-Security-Policy lives in src/proxy.ts: it needs a per-request nonce,
+// which static headers cannot carry.
 const nextConfig = {
   reactStrictMode: false,
   async headers() {
@@ -8,25 +8,6 @@ const nextConfig = {
       {
         source: "/:path*",
         headers: [
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              // Vercel Analytics serves its production script and beacon from the same
-              // origin; only the dev-only debug build comes from vercel-scripts.com.
-              isDev
-                ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com"
-                : "script-src 'self' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: https:",
-              "font-src 'self' data: https://fonts.gstatic.com",
-              "connect-src 'self'",
-              "object-src 'none'",
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join("; "),
-          },
           { key: "Referrer-Policy", value: "no-referrer" },
           { key: "X-Content-Type-Options", value: "nosniff" },
         ],

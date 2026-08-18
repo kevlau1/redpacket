@@ -10,6 +10,9 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+/** A nonce is minted per request, so nothing here can be prerendered without one. */
+export const dynamic = "force-dynamic";
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
